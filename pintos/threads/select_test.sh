@@ -10,7 +10,7 @@ if (( $# < 1 || $# > 2 )); then
   echo "  -r   : force clean & full rebuild"
   exit 1
 fi
-
+1
 MODE="$1"
 if [[ "$MODE" != "-q" && "$MODE" != "-g" ]]; then
   echo "Usage: $0 [-q|-g] [-r]"

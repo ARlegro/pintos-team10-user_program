@@ -20,6 +20,18 @@
  * Task-State Segment descriptors.  The former two types are
  * exactly what they sound like.  The TSS is used primarily for
  * stack switching on interrupts. */
+/* 전역 디스크립터 테이블(GDT).
+ *
+ * GDT는 x86-64 아키텍처에 특화된 구조체로,
+ * 시스템의 모든 프로세스가 권한에 따라 사용할 수 있는 세그먼트를 정의한다.
+ * 프로세스마다 존재하는 LDT(Local Descriptor Table)도 있지만,
+ * 현대 운영체제에서는 사용되지 않는다.
+ *
+ * GDT의 각 엔트리는 바이트 오프셋으로 식별되며,
+ * 세그먼트를 나타낸다. 여기서 중요한 세그먼트는 세 가지:
+ * 코드(code), 데이터(data), 그리고 TSS(Task-State Segment).
+ * 코드와 데이터 세그먼트는 이름 그대로다.
+ * TSS는 주로 인터럽트 발생 시 스택 전환(stack switching)에 사용된다. */
 
 struct segment_desc {
 	unsigned lim_15_0 : 16;
@@ -79,9 +91,13 @@ struct desc_ptr gdt_ds = {
 
 /* Sets up a proper GDT.  The bootstrap loader's GDT didn't
    include user-mode selectors or a TSS, but we need both now. */
+/* 올바른 GDT를 설정한다.
+   부트스트랩 로더의 GDT에는 사용자 모드 셀렉터나 TSS가 없으므로,
+   이제 이들을 추가해야 한다. */
 void
 gdt_init (void) {
 	/* Initialize GDT. */
+	/* GDT 초기화 */
 	struct segment_descriptor64 *tss_desc =
 		(struct segment_descriptor64 *) &gdt[SEL_TSS >> 3];
 	struct task_state *tss = tss_get ();
@@ -107,6 +123,7 @@ gdt_init (void) {
 
 	lgdt (&gdt_ds);
 	/* reload segment registers */
+	/* 세그먼트 레지스터를 다시 로드한다 */
 	asm volatile("movw %%ax, %%gs" :: "a" (SEL_UDSEG));
 	asm volatile("movw %%ax, %%fs" :: "a" (0));
 	asm volatile("movw %%ax, %%es" :: "a" (SEL_KDSEG));
@@ -118,5 +135,6 @@ gdt_init (void) {
 			"lretq\n"
 			"1:\n" :: "b" (SEL_KCSEG):"cc","memory");
 	/* Kill the local descriptor table */
+	/* 로컬 디스크립터 테이블(LDT)을 비운다 */
 	lldt (0);
 }

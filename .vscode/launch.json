@@ -1,32 +1,24 @@
 {
   "version": "0.2.0",
   "configurations": [
-    {
-      "name": "[Week 9]Threads Debug",
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/pintos/threads/build/kernel.o",
-      "cwd": "${workspaceFolder}/pintos/userprog",
-      "miDebuggerPath": "/usr/bin/gdb",
-      "miDebuggerServerAddress": "localhost:1234",
-    },
-    {
-      "name": "[Week 10-11]User Program Debug",
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/pintos/userprog/build/kernel.o",
-      "cwd": "${workspaceFolder}/pintos/userprog",
-      "miDebuggerPath": "/usr/bin/gdb",
-      "miDebuggerServerAddress": "localhost:1234",
-    },
-    {
-      "name": "[Week 12-13]VM Debug",
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/pintos/vm/build/kernel.o",
-      "cwd": "${workspaceFolder}/pintos/vm",
-      "miDebuggerPath": "/usr/bin/gdb",
-      "miDebuggerServerAddress": "localhost:1234"
-    },
+ {
+   "name": "Pintos Debug (cppdbg)",
+   "type": "cppdbg",
+   "request": "launch",
+   "program": "${workspaceFolder}/pintos/userprog/build/kernel.o",   // 심볼
+   "cwd": "${workspaceFolder}/pintos/userprog",
+   "MIMode": "gdb",
+   "miDebuggerPath": "/usr/bin/gdb",
+   "miDebuggerServerAddress": "localhost:1234",
+   "externalConsole": false,
+   "stopAtEntry": true,
+   "setupCommands": [
+     { "text": "-gdb-set disassembly-flavor intel" },
+     { "text": "set pagination off" },
+     { "text": "set breakpoint pending on" },
+     // 소스 경로가 다를 수 있으면 아래 줄을 내 경로에 맞게 추가
+     // { "text": "set substitute-path /컨테이너/빌드/경로 ${workspaceFolder}" }
+   ]
+ }
   ]
 }
