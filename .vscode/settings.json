@@ -10,6 +10,8 @@
     "utility": "c",
     "synch.h": "c",
     "console.h": "c",
-    "intrinsic.h": "c"
+    "intrinsic.h": "c",
+    "stdio.h": "c",
+    "stdlib.h": "c"
   }
 }

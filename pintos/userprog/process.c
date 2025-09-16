@@ -57,6 +57,11 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
+	// Project_2
+	// 이 부분을 수정해주지 않으면 Test Case의 Thread_name이 커맨드 라인 전체로 바뀌게 되어 Pass할 수 없다
+	char *ptr;
+    strtok_r(file_name, " ", &ptr);
+
 	/* Create a new thread to execute FILE_NAME. */
 	/* FILE_NAME을 실행할 새 스레드를 생성한다. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -222,10 +227,10 @@ process_exec (void *f_name) {
 	 * it stores the execution information to the member. */
 	/* thread 구조체 안의 intr_frame은 사용할 수 없다.
 	 * 현재 스레드가 리스케줄될 때 실행 정보가 해당 멤버에 저장되기 때문이다. */
-	struct intr_frame _if;
-	_if.ds = _if.es = _if.ss = SEL_UDSEG;
-	_if.cs = SEL_UCSEG;
-	_if.eflags = FLAG_IF | FLAG_MBS;
+	struct intr_frame fr;
+	fr.ds = fr.es = fr.ss = SEL_UDSEG;
+	fr.cs = SEL_UCSEG;
+	fr.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
 	/* 먼저 현재 컨텍스트를 종료(cleanup)한다. */
@@ -233,17 +238,22 @@ process_exec (void *f_name) {
 
 	/* And then load the binary */
 	/* 그리고 바이너리를 적재한다. */
-	success = load (file_first_name, &_if);
+	success = load (file_first_name, &fr);
+
+	//Project_2
+	argument_stack (arg_list, arg_cnt, &fr);
 
 	/* If load failed, quit. */
 	/* 적재에 실패하면 종료한다. */
-	palloc_free_page (file_first_name);
+	// palloc_free_page (file_name);
 	if (!success)
 		return -1;
 
+    hex_dump(fr.rsp, fr.rsp, USER_STACK - fr.rsp, true); // 0x47480000	
+
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작한다. */
-	do_iret (&_if);
+	do_iret (&fr);
 	NOT_REACHED ();
 }
 
@@ -817,3 +827,40 @@ setup_stack (struct intr_frame *if_) {
 	return success;
 }
 #endif /* VM */
+
+// 유저 스택에 파싱된 토큰을 저장하는 함수
+void argument_stack(char **argv, int argc, struct intr_frame *fr)
+{
+	char *arg_addr[100];
+	int argv_len;
+
+	// argv의 마지막 인자부터 스택에 거꾸로 삽입
+	// 높은 쪽에서 낮은 쪽으로 자라기 때문에 역순
+	for (int i = argc - 1; i >= 0; i--)
+	{
+		argv_len = strlen(argv[i]) + 1;
+		fr->rsp -= argv_len;
+		memcpy(fr->rsp, argv[i], argv_len);
+		arg_addr[i] = fr->rsp;
+	}
+
+	while (fr->rsp % 8)
+	{
+		(*(uint8_t *)(--fr->rsp)) = 0;
+	}
+
+	fr->rsp -= 8;
+	memset(fr->rsp, 0, sizeof(char *));
+
+	for (int i = argc - 1; i >= 0; i--)
+	{
+		fr->rsp -= 8;
+		memcpy(fr->rsp, &arg_addr[i], sizeof(char *));
+	}
+
+	fr->rsp = fr->rsp - 8;
+	memset(fr->rsp, 0, sizeof(void *));
+
+	fr->R.rdi = argc;
+	fr->R.rsi = fr->rsp + 8;
+}
