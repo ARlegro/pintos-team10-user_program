@@ -199,6 +199,24 @@ process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
+	// project_2
+	// 원본 문자열을 파싱하는 것보다 복사본을 하는 것이 안전
+	char file_name_copy[128];
+	memcpy(file_name_copy, file_name, strlen(file_name) + 1);
+
+	char *ptr, *arg;
+    int arg_cnt = 0;
+    char *arg_list[32];
+
+	// 공백 기준으로 파싱, arg는 첫 주소, ptr은 다음 주소
+	for (arg = strtok_r(file_name_copy, " ", &ptr); arg != NULL; arg = strtok_r(NULL, " ", &ptr))
+	{
+		arg_list[arg_cnt++] = arg;
+	}
+	
+	// 첫번째 인자명
+	char *file_first_name = arg_list[0];
+
 	/* We cannot use the intr_frame in the thread structure.
 	 * This is because when current thread rescheduled,
 	 * it stores the execution information to the member. */
@@ -215,11 +233,11 @@ process_exec (void *f_name) {
 
 	/* And then load the binary */
 	/* 그리고 바이너리를 적재한다. */
-	success = load (file_name, &_if);
+	success = load (file_first_name, &_if);
 
 	/* If load failed, quit. */
 	/* 적재에 실패하면 종료한다. */
-	palloc_free_page (file_name);
+	palloc_free_page (file_first_name);
 	if (!success)
 		return -1;
 
@@ -252,6 +270,12 @@ process_wait (tid_t child_tid UNUSED) {
 	 * XXX:       implementing the process_wait. */
 	/* XXX: 힌트) Pintos가 process_wait(initd)에서 종료될 수 있으므로,
 	 * XXX:       구현 전 이 위치에 무한 루프를 두는 것을 권장한다. */
+	
+	while(1)
+	{
+
+	}
+
 	return -1;
 }
 
