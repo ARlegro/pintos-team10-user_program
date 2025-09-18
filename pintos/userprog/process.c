@@ -828,39 +828,42 @@ setup_stack (struct intr_frame *if_) {
 }
 #endif /* VM */
 
+// Project_2
+
 // 유저 스택에 파싱된 토큰을 저장하는 함수
+// 문자열과 문자열의 주소들을 저장함, rsp = regiser stack pointer (스택  포인터)
 void argument_stack(char **argv, int argc, struct intr_frame *fr)
 {
-	char *arg_addr[100];
+	char *arg_addr[100];									// 스택에 저장된 주소를 보관하는 배열
 	int argv_len;
 
 	// argv의 마지막 인자부터 스택에 거꾸로 삽입
 	// 높은 쪽에서 낮은 쪽으로 자라기 때문에 역순
 	for (int i = argc - 1; i >= 0; i--)
 	{
-		argv_len = strlen(argv[i]) + 1;
-		fr->rsp -= argv_len;
-		memcpy(fr->rsp, argv[i], argv_len);
-		arg_addr[i] = fr->rsp;
-	}
+		argv_len = strlen(argv[i]) + 1;						// 문자열 길이 + NULL 문자
+		fr->rsp -= argv_len;								// 스택 포인터를 인자 길이만큼 감소
+		memcpy(fr->rsp, argv[i], argv_len);					// 실제 문자열을 스택에 복사
+		arg_addr[i] = fr->rsp;								// 해당 문자열이 저장된 주소 기록
+	}	
 
-	while (fr->rsp % 8)
-	{
-		(*(uint8_t *)(--fr->rsp)) = 0;
-	}
+	while (fr->rsp % 8)										// 스택을 8바이트 단위로 정렬
+	{	
+		(*(uint8_t *)(--fr->rsp)) = 0;						// 1바이트씩 0으로 채움
+	}	
 
-	fr->rsp -= 8;
+	fr->rsp -= 8;											// argv[argc] = NULL
 	memset(fr->rsp, 0, sizeof(char *));
 
-	for (int i = argc - 1; i >= 0; i--)
+	for (int i = argc - 1; i >= 0; i--)						// argv 배열을 스택에 역순으로 저장
 	{
-		fr->rsp -= 8;
-		memcpy(fr->rsp, &arg_addr[i], sizeof(char *));
+		fr->rsp -= 8;										// 포인터 크기만큼 스택 감소
+		memcpy(fr->rsp, &arg_addr[i], sizeof(char *));		// 문자열 주소를 스택에 저장
 	}
 
-	fr->rsp = fr->rsp - 8;
+	fr->rsp = fr->rsp - 8;									// fake return address (NULL) 저장
 	memset(fr->rsp, 0, sizeof(void *));
 
-	fr->R.rdi = argc;
-	fr->R.rsi = fr->rsp + 8;
+	fr->R.rdi = argc;										// 첫 번째 인자 전달 규약에 맞게 레지스터 설정
+	fr->R.rsi = fr->rsp + 8;								
 }

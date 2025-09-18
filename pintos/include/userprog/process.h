@@ -12,5 +12,6 @@ void process_activate (struct thread *next);
 
 // Project_2
 void argument_stack(char **argv, int argc, struct intr_frame *if_);
+void check_address(void *addr);
 
 #endif /* userprog/process.h */

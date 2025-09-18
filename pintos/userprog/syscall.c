@@ -7,6 +7,8 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "userprog/process.h"
+#include "filesys/filesys.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -55,8 +57,101 @@ syscall_init (void) {
 /* 메인 시스템 콜 인터페이스 */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
-	// TODO: 여기에 구현을 추가하라.
+	int sys_number = f->R.rax;							// f->R.rax 는 시스템 콜 번호가 들어있는 레지스터 값
+
+	switch (sys_number)
+	{
+	case SYS_HALT:
+		halt();
+		break;
+	case SYS_EXIT:
+		exit(f->R.rdi);
+		break;
+	case SYS_FORK:
+		//fork(f->R.rdi);
+		break;
+	case SYS_EXEC:
+		break;
+	case SYS_WAIT:
+		f->R.rax = process_wait(f->R.rdi);
+		break;
+	case SYS_CREATE:
+		f->R.rax = create(f->R.rdi, f->R.rsi);			// f는 인터럽트가 발생했을 때 CPU 레지스터 상태를 저장한 구조체, R은 범용 레지스터 집합
+														// rdi = 파일 이름 문자열, rsi = 초기 크기 값
+		break;	
+	case SYS_REMOVE:
+		f->R.rax = remove(f->R.rdi);
+		break;
+	case SYS_OPEN:
+		break;
+	case SYS_FILESIZE:
+		break;
+	case SYS_READ:
+		break;
+	case SYS_WRITE:
+		break;
+	case SYS_SEEK:
+		break;
+	case SYS_TELL:
+		break;
+	case SYS_CLOSE:
+		break;
+	default:
+		exit(-1);
+	}
+
 	printf ("system call!\n");
 	thread_exit ();
+}
+
+bool create(const char *file, unsigned initial_size)
+{
+	check_address(file);							// 포인터 안정성 체크
+
+	if (filesys_create(file, initial_size))			// 커널 내부에서 파일을 생성하는 함수
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+bool remove(const char *file)
+{
+	check_address(file);
+
+	if (filesys_remove(file))
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
+
+void halt(void)
+{
+	power_off();
+}
+
+void exit(int status)
+{
+	struct thread *t = thread_current();
+	printf("%s: exit(%d)\n", t->name, status);
+	thread_exit();
+}
+
+// 포인터가 가르키는 주소가 사용자 영역인지 확인
+void check_address(void *addr)
+{
+	struct thread *t = thread_current();	
+
+	if (!is_user_vaddr(addr) || addr == NULL ||				// 1) addr이 유저 영역 가상주소인지 확인 (커널 영역 접근 방지)
+	pml4_get_page(t->pml4, addr) == NULL)					// 2) addr이 NULL 포인터인지 확인
+	{														// 3) 현재 프로세스의 페이지 테이블에 매핑된 물리 페이지가 없는지 확인
+		exit(-1);
+	}
 }

@@ -2,10 +2,12 @@
     "configurations": [
         {
             "name": "Linux",
+            "defines": [
+                "USERPROG"
+            ],
             "includePath": [
                 "${workspaceFolder}/**"
             ],
-            "defines": [],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c17",
             "cppStandard": "gnu++17",
