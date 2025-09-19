@@ -10,6 +10,7 @@
 #include "userprog/process.h"
 #include "filesys/filesys.h"
 #include "lib/kernel/stdio.h"
+#include "filesys/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -56,10 +57,13 @@ syscall_init (void) {
 
 /* The main system call interface */
 /* 메인 시스템 콜 인터페이스 */
+// rax -> 시스템 콜 번호, rdi, rsi, rdx, r10, r8, r9 순서, x86-64 System Call Calling Convention
 void
 syscall_handler (struct intr_frame *f UNUSED) {
-	int sys_number = f->R.rax;							// f->R.rax 는 시스템 콜 번호가 들어있는 레지스터 값
 
+	// f->R.rax 는 시스템 콜 번호가 들어있는 레지스터 값
+	int sys_number = f->R.rax;										// f는 인터럽트가 발생했을 때 CPU 레지스터 상태를 저장한 구조체, R은 범용 레지스터 집합, rdi = 파일 이름 문자열, rsi = 초기 크기 값
+														
 	switch (sys_number)
 	{
 	case SYS_HALT:
@@ -77,13 +81,13 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = process_wait(f->R.rdi);
 		break;
 	case SYS_CREATE:
-		f->R.rax = create(f->R.rdi, f->R.rsi);			// f는 인터럽트가 발생했을 때 CPU 레지스터 상태를 저장한 구조체, R은 범용 레지스터 집합
-														// rdi = 파일 이름 문자열, rsi = 초기 크기 값
+		f->R.rax = create(f->R.rdi, f->R.rsi);														
 		break;	
 	case SYS_REMOVE:
 		f->R.rax = remove(f->R.rdi);
 		break;
 	case SYS_OPEN:
+		f->R.rax = open(f->R.rdi);
 		break;
 	case SYS_FILESIZE:
 		break;
@@ -97,6 +101,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_TELL:
 		break;
 	case SYS_CLOSE:
+		close(f->R.rdi);
 		break;
 	default:
 		exit(-1);
@@ -104,20 +109,6 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 	// printf ("system call!\n");
 	// thread_exit ();
-}
-
-bool create(const char *file, unsigned initial_size)
-{
-	check_address(file);							// 포인터 안정성 체크
-
-	return filesys_create(file, initial_size);				// 커널 내부에서 파일을 생성하는 함수
-}
-
-bool remove(const char *file)
-{
-	check_address(file);
-
-	return filesys_remove(file);
 }
 
 void halt(void)
@@ -133,18 +124,65 @@ void exit(int status)
 	thread_exit();
 }
 
-int write (int fd, const void *buffer, unsigned length)
+bool create(const char *file, unsigned initial_size)
 {
-	int byte = 0;
-	if (fd == 1)
-	{
-		putbuf(buffer, length);
-		byte = length;
-	}
+	check_address(file);									// 포인터 안정성 체크
 
-	return byte;
+	return filesys_create(file, initial_size);				// 커널 내부에서 파일을 생성하는 함수
 }
 
+bool remove(const char *file)
+{
+	check_address(file);
+	
+	return filesys_remove(file);							// 커널 내부 파일 시스템에서 해당 파일 삭제
+}
+
+int open(const char *file)
+{
+	check_address(file);									// 포인터 안정성 검사
+	struct file *p_file = filesys_open(file);				// 파일 열기
+
+	if (p_file == NULL)										// 파일 없으면
+	{
+		return -1;
+	}
+
+	int fd = fd_table_add_file(p_file);						// 파일 디스크립터 테이블에 파일 추가
+
+	if (fd == -1)											// 실패시
+	{
+		file_close(p_file);
+	}
+
+	return fd;
+}
+
+int write(int fd, const void *buffer, unsigned length)
+{
+	int byte = 0;											// 실제로 기록한 바이트 수
+
+	if (fd == 1)											// 표준 출력일 경우만 처리
+	{
+		putbuf(buffer, length);								// 콘솔 버퍼에 문자열 출력
+		byte = length;										
+	}
+
+	return byte;											// 출력한 바이트 수 반환
+}
+
+void close(int fd)
+{
+	struct file *file = fd_table_get_file(fd);
+
+	if (fd < 3 || file == NULL)								// 표준 입출력 fd(0,1,2)거나, 잘못된 fd(NULL)이면 무시
+	{
+		return;
+	}
+
+	fd_table_close_file(fd);								// 파일 디스크립터 테이블에서 fd를 제거(NULL)
+	file_close(file);										// 실제 파일 객체를 닫음(참조 해제)
+}
 
 // 포인터가 가르키는 주소가 사용자 영역인지 확인
 void check_address(void *addr)

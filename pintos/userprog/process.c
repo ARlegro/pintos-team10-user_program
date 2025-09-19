@@ -277,8 +277,7 @@ process_exec (void *f_name) {
 int
 process_wait (tid_t child_tid UNUSED) {
 	/* 1. 자식 목록 + 엔트리 구조체
-	   2. 소유권/수거 규칙
-	   3. 동기화
+	   2. 소유권/수거 규칙3. 동기화
 	   4. 예외 케이스 처리
 	   5. 부모/자식 연결
 	*/
@@ -865,4 +864,46 @@ void argument_stack(char **argv, int argc, struct intr_frame *fr)
 
 	fr->R.rdi = argc;										// 첫 번째 인자 전달 규약에 맞게 레지스터 설정
 	fr->R.rsi = fr->rsp + 8;								
+}
+
+
+int fd_table_add_file(struct file *p_file)
+{
+	struct thread *cur = thread_current();
+	struct file **fdt = cur->fdt;							// 해당 스레드의 FDT
+
+	if (cur->fd_idx >= FDCOUNT_LIMIT)						// LIMIT 초과 시 에러 반환
+	{
+		return -1;	
+	}
+
+	fdt[cur->fd_idx++] = p_file;							// fd_idx 위치에 파일 포인터를 저장, idx 증가
+
+	return cur->fd_idx - 1;									// 실제 할당된 증가 전 fd 번호를 반환
+}
+
+struct file *fd_table_get_file(int fd)
+{
+	struct thread *cur = thread_current();
+	
+	if (fd >= FDCOUNT_LIMIT)								// LIMIT 초과 시 NULL 반환
+	{
+		return NULL;
+	}
+
+	return cur->fdt[fd];									// fd 인덱스에 해당하는 파일 포인터 반환
+}
+
+int fd_table_close_file(int fd)
+{
+	struct thread *cur = thread_current();
+
+	if (fd >= FDCOUNT_LIMIT)								// LIMIT 초과 시 에러 반환
+	{
+		return -1;
+	}
+
+	cur->fdt[fd] = NULL;									// fd 위치를 NULL로 설정하여 FD 해제
+	
+	return 0;
 }

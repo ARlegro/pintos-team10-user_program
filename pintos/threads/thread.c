@@ -193,6 +193,25 @@ tid_t thread_create (const char *name, int priority, thread_func *function, void
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	// Project_2
+	#ifdef USERPROG
+	
+	t->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);			// 페이지 할당기에서 여러 개의 연속된 페이지를 가져옴, PAL_ZERO: 페이지를 0 초기화, PAL_ASSERT: 실패 시 PANIC
+	if (t->fdt == NULL)
+	{
+		return TID_ERROR;
+	}
+
+	t->exit_status = 0;											
+
+	t->fd_idx = 3;												// 3부터 시작
+
+	t->fdt[0] = 0;												// 표준 입력(STDIN)
+	t->fdt[1] = 1;												// 표준 출력(STDOUT)
+	t->fdt[2] = 2;												// 표준 에러(STDERR)
+	
+	#endif
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -464,8 +483,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->eff_priority = priority;
 	t->magic = THREAD_MAGIC;
-
-	t->exit_status = 0;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

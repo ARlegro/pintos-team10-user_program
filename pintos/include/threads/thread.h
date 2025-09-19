@@ -108,7 +108,14 @@ struct thread {
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
-	int exit_status;					// Project_2
+	
+	// Project_2												// 한 페이지 = 4KB = 4096 바이트 / 8  = 512개
+	#define FDT_PAGES 			3								// 프로세스마다 FDT를 몇 페이지로 확보할지 지정. 3 페이지(3 * 4KB = 12KB) 사용
+	#define FDCOUNT_LIMIT		FDT_PAGES * (1 << 9)			// 한 페이지에는 512개의 포인터를 담을 수 있다. 3 * 512 = 1536개 슬롯 (2^9 = 512)
+
+	int exit_status;
+	int fd_idx;							// 파일 디스크립터 인덱스
+	struct file **fdt;					// 파일 디스크립터 테이블
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
