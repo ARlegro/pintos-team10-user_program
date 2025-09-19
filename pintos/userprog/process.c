@@ -18,6 +18,7 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -249,7 +250,7 @@ process_exec (void *f_name) {
 	if (!success)
 		return -1;
 
-    hex_dump(fr.rsp, fr.rsp, USER_STACK - fr.rsp, true); // 0x47480000	
+    //hex_dump(fr.rsp, fr.rsp, USER_STACK - fr.rsp, true); // 0x47480000	
 
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작한다. */
@@ -275,16 +276,14 @@ process_exec (void *f_name) {
  * 이 함수는 문제 2-2에서 구현된다. 현재는 아무 것도 하지 않는다. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
-	 * XXX:       to add infinite loop here before
-	 * XXX:       implementing the process_wait. */
-	/* XXX: 힌트) Pintos가 process_wait(initd)에서 종료될 수 있으므로,
-	 * XXX:       구현 전 이 위치에 무한 루프를 두는 것을 권장한다. */
-	
-	while(1)
-	{
+	/* 1. 자식 목록 + 엔트리 구조체
+	   2. 소유권/수거 규칙
+	   3. 동기화
+	   4. 예외 케이스 처리
+	   5. 부모/자식 연결
+	*/
 
-	}
+	for(int i = 0; i < 1000000000; i++);
 
 	return -1;
 }

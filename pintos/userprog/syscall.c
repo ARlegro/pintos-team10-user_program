@@ -9,6 +9,7 @@
 #include "intrinsic.h"
 #include "userprog/process.h"
 #include "filesys/filesys.h"
+#include "lib/kernel/stdio.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -89,6 +90,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 	case SYS_READ:
 		break;
 	case SYS_WRITE:
+		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	case SYS_SEEK:
 		break;
@@ -100,36 +102,22 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		exit(-1);
 	}
 
-	printf ("system call!\n");
-	thread_exit ();
+	// printf ("system call!\n");
+	// thread_exit ();
 }
 
 bool create(const char *file, unsigned initial_size)
 {
 	check_address(file);							// 포인터 안정성 체크
 
-	if (filesys_create(file, initial_size))			// 커널 내부에서 파일을 생성하는 함수
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	return filesys_create(file, initial_size);				// 커널 내부에서 파일을 생성하는 함수
 }
 
 bool remove(const char *file)
 {
 	check_address(file);
 
-	if (filesys_remove(file))
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	return filesys_remove(file);
 }
 
 void halt(void)
@@ -140,9 +128,23 @@ void halt(void)
 void exit(int status)
 {
 	struct thread *t = thread_current();
+	t->exit_status = status;
 	printf("%s: exit(%d)\n", t->name, status);
 	thread_exit();
 }
+
+int write (int fd, const void *buffer, unsigned length)
+{
+	int byte = 0;
+	if (fd == 1)
+	{
+		putbuf(buffer, length);
+		byte = length;
+	}
+
+	return byte;
+}
+
 
 // 포인터가 가르키는 주소가 사용자 영역인지 확인
 void check_address(void *addr)

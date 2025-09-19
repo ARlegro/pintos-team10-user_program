@@ -38,7 +38,10 @@
     "cstdlib": "c",
     "syscall-nr.h": "c",
     "filesys.h": "c",
-    "process.h": "c"
+    "process.h": "c",
+    "*.inc": "c",
+    "syscall.h": "c",
+    "lib.h": "c"
   },
   "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }
