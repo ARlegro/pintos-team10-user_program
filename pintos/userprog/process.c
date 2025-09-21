@@ -492,20 +492,18 @@ static struct thread *find_child_thread_by_tid(tid_t child_tid) {
 
 /* Exit the process. This function is called by thread_exit (). */
 void process_exit (void) {
+	struct thread *cur = thread_current();
 
-	/** 동기화를 여기다 처리하지 말기 : 
-	 * 동기화는 종료 이벤트가 확정되는 지점에서 하는 것이 좋다.
-	 * `process_exit`은  `thread_exit()`에 의해서 불리고 이것도 `exit`관련 핸들러에서 처리하는 것이 좋다.
-	 * 이렇게 하면 아래와 같은 순서가 됨 
-	 * 종료 코드 결정 ➡ 부모 알림 ➡ 부모 수습 ➡ 자식 자원 정리 
-	 * 보통 종료 상태는 예외 핸들러가 관리 
-	 */
-	// struct thread *cur = thread_current ();
-	// struct thread *parent = cur->parent;
-	// if (parent != NULL) {
-	// 	sema_up(&cur->wait_sema);  // 꺠우고 
-	// 	sema_down(&cur->exit_sema); // 자원정리하기 전에 부모가 뭐좀 하라고 놨두기
-	// }
+	// FD 테이블 전부 닫기
+	while (!list_empty(&cur->fd_table)) {
+			struct list_elem *e = list_pop_front(&cur->fd_table);
+			struct fd_table_entry *entry = list_entry(e, struct fd_table_entry, elem);
+			if (entry->file) {
+				file_close(entry->file);
+			}
+			free(entry);
+	}
+
 	// struct thread *cur = thread_current();
 	// struct file *running_file = cur->running_file;
 	// if (running_file != NULL){
