@@ -266,7 +266,7 @@ int sys_read (int fd, void *buffer, unsigned size) {
 		return -1;
 	}
 	
-	validate_addr(buffer);
+	validate_user_buffer(buffer, size);
 	struct file *to_read_file = find_file_by_fd(fd);
 	
 	if (to_read_file == NULL) {
@@ -308,6 +308,8 @@ int sys_open_file(const char *file){
 	if (opened_file == NULL){
 		return -1;
 	}
+	// 누수 
+	palloc_free_page(kernel_file);
 
 	struct thread *cur = thread_current();
 	struct fd_table_entry *entry = malloc(sizeof(struct fd_table_entry));

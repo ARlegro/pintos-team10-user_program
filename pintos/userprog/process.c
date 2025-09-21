@@ -93,6 +93,9 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 
 	// 1. 메모리 할당 
 	struct fork_args *args = palloc_get_page (0);
+	if (args == NULL){
+		return TID_ERROR;
+	}
 
 	// 2. 값 채워 넣기 
 	args->parent = parent;
@@ -197,7 +200,7 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
 	struct intr_frame parent_if = fork_args->parent_intr_f;
 
-	//current->parent = parent;
+	current->parent = parent;
 	bool succ = true;
 
 	// 2. 부모의 CPU 레지스터(유저 컨텍스트) 복사 
@@ -249,17 +252,22 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	current->next_fd = parent->next_fd;
 
 	process_init ();
-	// 6. 부모 깨우기 
-	sema_up(&parent->fork_sema);
+
 	// 7. 성공 시 rax 0세팅 + do_iret, 실패 시 에러로 goto
 	if (!succ) {
 		goto error;
 	} 
-	
+
+	// 6. 부모 깨우기 
+	sema_up(&parent->fork_sema);
 	current->tf.R.rax = 0;
 	do_iret (&current->tf);
 		
 error:
+
+	if (parent != NULL){
+		sema_up(&parent->fork_sema);
+	}
 
 	thread_exit ();
 }
@@ -458,6 +466,7 @@ int process_wait (tid_t child_tid UNUSED) {
 
 	// 2. 자식 종료까지 대기 
 	sema_down(&child->wait_sema);
+
 	child->is_waited = false;
 
 	int status = child->exit_status;
