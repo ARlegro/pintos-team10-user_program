@@ -42,7 +42,7 @@ static void sys_close(int fd);
 
 static struct file *find_file_by_fd(int fd);
 struct fd_table_entry *find_file_entry_by_fd(int fd);
-static void validate_user_buffer(const void *buf, size_t size);
+static void strong_validate_addr(const void *buf, size_t size);
 static void validate_fd(int fd);
 static bool validate_user_vaddr(const void *addr);
 /* System call.
@@ -266,7 +266,7 @@ int sys_read (int fd, void *buffer, unsigned size) {
 		return -1;
 	}
 	
-	validate_user_buffer(buffer, size);
+	strong_validate_addr(buffer, size);
 	struct file *to_read_file = find_file_by_fd(fd);
 	
 	if (to_read_file == NULL) {
@@ -290,9 +290,12 @@ int sys_read (int fd, void *buffer, unsigned size) {
  * FD는 포인터 주소만 -> 이중 포인터
  */
 int sys_open_file(const char *file){
+	
 	if (file == NULL || !(is_user_vaddr(file)) || pml4_get_page(thread_current()->pml4, file) == NULL) {
 		return -1;
 	}
+	// 커널 주소로 쓰레기 값 넘어오는 것도 
+
 	// validate_addr(file);
 	char *kernel_file = palloc_get_page(0);
 	if (kernel_file == NULL){
@@ -305,11 +308,11 @@ int sys_open_file(const char *file){
 	lock_acquire(&filesys_lock);
 	struct file *opened_file = filesys_open(kernel_file);
 	lock_release(&filesys_lock);
+	// 누수 
+	palloc_free_page(kernel_file);
 	if (opened_file == NULL){
 		return -1;
 	}
-	// 누수 
-	palloc_free_page(kernel_file);
 
 	struct thread *cur = thread_current();
 	struct fd_table_entry *entry = malloc(sizeof(struct fd_table_entry));
@@ -342,10 +345,8 @@ void sys_exit(int status){
 			cur->running_file = NULL;
 		}
 
-		sema_up(&cur->wait_sema);  // 꺠우고 ()
-		if (cur->is_waited){
-			sema_down(&cur->exit_sema);
-		}
+		sema_up(&cur->wait_sema);  
+		sema_down(&cur->exit_sema);
 	}
 	
 	thread_exit();
@@ -376,8 +377,10 @@ void sys_seek(int fd, unsigned position) {
 	if (file_ptr == NULL){
 		sys_exit(-1);
 	}
-		
+	
+	lock_acquire(&filesys_lock);
 	file_seek(file_ptr, position);
+	lock_release(&filesys_lock);
 }
 
 // Note : arg buf는 사용자 프로세스 주소 공간에 있는 포인터 
@@ -387,7 +390,7 @@ int sys_write(int fd, const void *buf, size_t size){
 		return -1;
 	} 	
 	
-	validate_user_buffer(buf, size);
+	strong_validate_addr(buf, size);
 
 	// 1 = STDOUT
 	if (fd == STDOUT_FILENO) {
@@ -420,14 +423,19 @@ void sys_close (int fd) {
 	}
 	
 	struct file *file_ptr = entry->file;
+	lock_acquire(&filesys_lock);
 	file_close(file_ptr);
+	lock_release(&filesys_lock);	
 	list_remove(&entry->elem);
 	free(entry);
 }
 
 bool sys_remove(const char *file) {
 	validate_addr(file);
-	return filesys_remove(file);
+	lock_acquire(&filesys_lock);
+	int result = filesys_remove(file);
+	lock_release(&filesys_lock);
+	return result;
 }
 
 
@@ -436,7 +444,7 @@ bool sys_remove(const char *file) {
  * - buf가 실제로 매핑된 메모리가 있는지
  * - buf가 user영역에 속하는지
  */ 
-void validate_user_buffer(const void *buf, size_t size) {
+void strong_validate_addr(const void *buf, size_t size) {
 	// TODO: Your implementation goes here.
 	const uint8_t *start = (uint8_t *)buf;
 	const uint8_t *end = (uint8_t *)buf + size - 1;
@@ -456,7 +464,6 @@ void validate_user_buffer(const void *buf, size_t size) {
 }
 
 void validate_fd(int fd) {
-	// TODO: Your implementation goes here.
 	const struct thread *cur = thread_current();	
 	if (fd < 0 || fd > 512) {
 		sys_exit(-1);

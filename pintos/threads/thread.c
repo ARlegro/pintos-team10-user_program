@@ -342,8 +342,11 @@ void thread_set_priority (int new_priority) {
 		struct thread *first = list_entry(list_front(&ready_list), struct thread, elem);
 		if (first->eff_priority > cur->eff_priority) {
 			intr_set_level(old);
-			//if (intr_context()) intr_yield_on_return();
-			thread_yield();
+			if (intr_context()) {
+				intr_yield_on_return();
+			} else{
+				thread_yield();
+			}
 			return;
 		}
 	}

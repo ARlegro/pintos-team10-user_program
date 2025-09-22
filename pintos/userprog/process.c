@@ -103,6 +103,10 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 
 	// 3. thead_create() 호출 (전달할 데이터 전달하기)
 	tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, (void *) args);
+	if (tid == TID_ERROR){
+		palloc_free_page (args);
+		return TID_ERROR;
+	}
 
 	// 4. 자식 신호 대기
 	sema_down(&parent->fork_sema);
@@ -111,7 +115,7 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	palloc_free_page (args);
 
 	// 추가 : fork 했는데 자식이 뭔가 실패해서 자원 회수당한 경우 
-	if (tid == TID_ERROR || find_child_thread_by_tid(tid) == NULL){
+	if (find_child_thread_by_tid(tid) == NULL){
 		return TID_ERROR;
 	}
 	
@@ -200,7 +204,7 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
 	struct intr_frame parent_if = fork_args->parent_intr_f;
 
-	current->parent = parent;
+	//current->parent = parent;
 	bool succ = true;
 
 	// 2. 부모의 CPU 레지스터(유저 컨텍스트) 복사 
