@@ -158,12 +158,11 @@ page_fault (struct intr_frame *f) {
 			write ? "writing" : "reading",
 			user ? "user" : "kernel");
 
-	if (fault_addr == (void *)NULL){
-		sys_exit(-1);
-		return;
-	}
-
-	// (no-VM 기준) 유저 모드에서 난 페이지 폴트는 항상 종료 처리
+	// if (fault_addr == (void *)NULL){
+	// 	sys_exit(-1);
+	// 	return;
+	// }
+	// 유저 모드에서 난 페이지 폴트는 항상 종료 처리
   if (user) {
     sys_exit(-1);
     return;

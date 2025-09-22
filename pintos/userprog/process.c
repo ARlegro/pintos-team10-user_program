@@ -90,9 +90,8 @@ initd (void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	bool result = validate_user_vaddr(name);
-	if (result == false){
-		return TID_ERROR;
+	if (validate_user_vaddr(name) == false){
+		return TID_ERROR;	
 	}
 
 	char thread_name[16];
@@ -155,12 +154,12 @@ bool validate_user_vaddr(const void *addr) {
  * - 용도 : 페이지 존재 여부, USER영역 여부, 쓰기 가능 여부
  * 
  * 2. va : 복제해야 할 가상 페이지의 기준 주소 
- * 3. aux :
+ * 3. aux : 인자 
  */ 
 
 /** 
  * Page 내용이 있는 커널 주소 얻는 법 = pml4_get_page(parent->pml4, va) 
- * Warning : parent->pml4는 부모의 PML4 테이블 최상위 포인터일 뿐 부모의 데이터 페이지가 아님
+ * (Warning : parent->pml4는 부모의 PML4 테이블 최상위 포인터일 뿐 부모의 데이터 페이지가 아님)
  * 즉, 부모의 데이터 페이지는 pml4_get_page(parent->pml4, va)로 구하기
  */ 
 static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
@@ -189,18 +188,12 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 		return false;
 	}
 
-	/* 4. TODO: Duplicate parent's page to the new page and
-	 *    TODO: check whether parent's page is writable or not (set WRITABLE
-	 *    TODO: according to the result). */
 	// memcpy(newpage, parent_page, PGSIZE); 
 	memcpy(newpage, pg_round_down(parent_page), PGSIZE); // 페이지 시작 기준으로 전체 페이지 복사
 	writable = is_writable(pte);
 
-	/* 5. Add new page to child's page table at address VA with WRITABLE
-	 *    permission. */
 	// 자식 pml4에 매핑 
 	if (!pml4_set_page (current->pml4, pg_round_down(va), newpage, writable)) {
-		/* 6. TODO: if fail to insert page, do error handling. */
 		palloc_free_page(newpage);
 		return false;
 	}
@@ -286,7 +279,6 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	do_iret (&current->tf);
 		
 error:
-	// 실패 시 부모 꺠우는건 sys_exit에서 알아서 함 
 	fork_args->is_forked = false;
 	sema_up(&fork_args->fork_sema);
 	

@@ -43,8 +43,6 @@ static void sys_close(int fd);
 static struct file *find_file_by_fd(int fd);
 struct fd_table_entry *find_file_entry_by_fd(int fd);
 static void strong_validate_addr(const void *buf, size_t size);
-static void validate_fd(int fd);
-static bool validate_user_vaddr(const void *addr);
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -88,63 +86,48 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 		}
 			
 		case SYS_EXIT: {
-			int status = (int) f->R.rdi;  
-			sys_exit(status);
+			sys_exit((int) f->R.rdi);
 			break;
 		}
 			
 		case SYS_FORK:{
-			const char *thread_name = (char *) f->R.rdi;
-			cur->tf = *f;
-			f->R.rax = process_fork(thread_name, &cur->tf);
+			f->R.rax = process_fork((char *) f->R.rdi, f);
 			break;
 		}
 			
-
 		case SYS_EXEC:{
-			char *command_line = (char *) f->R.rdi;
-			tid_t reuslt = sys_exec(command_line);
+			tid_t reuslt = sys_exec((char *) f->R.rdi);
 			if (reuslt == TID_ERROR){
 				f->R.rax = reuslt;
 			}
 			break;
 		}
 
-			
-
 		case SYS_WAIT:{
-			pid_t child_pid = (pid_t) f->R.rdi;
-			f->R.rax = process_wait(child_pid);
+			f->R.rax = process_wait((pid_t) f->R.rdi);
 			break;
 		}
 			
-
 		case SYS_CREATE: {
-			const char *file = (const char *) f->R.rdi;
-			unsigned initial_size = (int) f->R.rsi;
-			f->R.rax = sys_file_create(file, initial_size);
+			f->R.rax = sys_file_create((const char *) f->R.rdi, (int) f->R.rsi);
 			break;
 		}
 			
 
 		case SYS_REMOVE:{
-			const char *file = (const char *) f->R.rdi;
-			f->R.rax = sys_remove(file);
+			f->R.rax = sys_remove((const char *) f->R.rdi);
 			break;
 		}
 			
 
 		case SYS_OPEN:{
-			const char *file = (const char *) f->R.rdi;
-			int result = sys_open_file(file);
-			f->R.rax = result;
+			f->R.rax = sys_open_file((const char *) f->R.rdi);
 			break;
 		}
 
 
 		case SYS_FILESIZE:{
-			int fd = (int) f->R.rdi;
-			f->R.rax = sys_get_file_length(fd);
+			f->R.rax = sys_get_file_length((int) f->R.rdi);
 			break;
 		}
 
@@ -152,8 +135,7 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			int fd = (int) f->R.rdi;
 			void *buf = (void *) f->R.rsi;
 			unsigned size = (unsigned) f->R.rdx;
-			int result = sys_read(fd, buf, size);
-			f->R.rax = result;
+			f->R.rax = sys_read(fd, buf, size);
 			break;
 		}
 
@@ -161,21 +143,17 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			int fd = (int) f->R.rdi;
 			const void *buf = (const void *) f->R.rsi;
 			size_t size = (int) f->R.rdx;
-			int result = sys_write(fd, buf, size);
-			f->R.rax = result;
+			f->R.rax = sys_write(fd, buf, size);
 			break;
 		}
 
 		case SYS_SEEK:{
-			int fd = (int) f->R.rdi;
-			unsigned position = (unsigned) f->R.rsi;
-			sys_seek(fd, position);
+			sys_seek((int) f->R.rdi, (unsigned) f->R.rsi);
 			break;
 		}
 			
 		// 열려진 파일 fd에서 읽히거나 써질 다음 바이트의 위치를 반환
 		case SYS_TELL: {
-			// unsigned tell (int fd);
 			f->R.rax = sys_tell((int) f->R.rdi);
 			break;
 		}
@@ -204,11 +182,6 @@ void syscall_handler (struct intr_frame *f UNUSED) {
  * 흠... 힌트가 file.c의 file_reopen 쓰라는 뜻인가 
  */ 
 tid_t sys_exec(char *command_line){
-	// command_line은 유저 포인터니까 커널 포인터로 변경 (init에서 했던 것 처럼)
-	if (validate_user_vaddr(command_line) == false){
-		thread_current()->exit_status = -1;
-		return TID_ERROR;
-	}
 	tid_t tid = syscall_process_execute(command_line);
 	if (tid < 0){
 		thread_current()->exit_status = -1;
@@ -216,15 +189,6 @@ tid_t sys_exec(char *command_line){
 	} 
 	return tid;
 }
-
-// 유저 가상주소인지 + 실제 매핑되어 있는지 검증 
-bool validate_user_vaddr(const void *addr) {
-	if (addr == NULL || !(is_user_vaddr(addr)) || pml4_get_page(thread_current()->pml4, addr) == NULL) {
-		return false;
-	}
-	return true;
-}
-
 
 uint64_t sys_get_file_length(int fd) {
 	struct file *file_ptr = find_file_by_fd(fd);
@@ -241,6 +205,7 @@ uint64_t sys_get_file_length(int fd) {
 
 // return : 실제 읽은 값  (오류 시 -1)
 int sys_read (int fd, void *buffer, unsigned size) {
+	strong_validate_addr(buffer, size);
 	if (fd == STDIN_FILENO){
 		for (int i = 0; i < size; i++){
 			((uint8_t *)buffer)[i] = input_getc();
@@ -252,7 +217,6 @@ int sys_read (int fd, void *buffer, unsigned size) {
 		return -1;
 	}
 	
-	strong_validate_addr(buffer, size);
 	struct file *to_read_file = find_file_by_fd(fd);
 	
 	if (to_read_file == NULL) {
@@ -373,7 +337,7 @@ void sys_seek(int fd, unsigned position) {
 // Note : arg buf는 사용자 프로세스 주소 공간에 있는 포인터 
 int sys_write(int fd, const void *buf, size_t size){ 
 	if (size == 0) return 0;
-	if (buf == NULL || fd <= STDIN_FILENO){
+	if (fd <= STDIN_FILENO){
 		return -1;
 	} 	
 	
@@ -398,12 +362,11 @@ int sys_write(int fd, const void *buf, size_t size){
 
 
 void sys_close (int fd) {
-	if (fd < 0 || fd > 126) {
+	if (fd < 0) {
 		return;
 	}
 	
 	const struct thread *cur = thread_current();
-	// 이거 매우 비효율적임. 나중에 배열 형식으로 바꾸기 
 	struct fd_table_entry *entry = find_file_entry_by_fd(fd);
 	if (entry == NULL){
 		return;
@@ -437,7 +400,7 @@ void strong_validate_addr(const void *buf, size_t size) {
 	const uint8_t *end = (uint8_t *)buf + size - 1;
 	
 	// 유효한 주소 인지 
-	if (!is_user_vaddr((void *)start) || !is_user_vaddr((void *)end)) {
+	if (buf == NULL || !is_user_vaddr((void *)start) || !is_user_vaddr((void *)end)) {
 		sys_exit(-1);
 	}
 
@@ -448,16 +411,6 @@ void strong_validate_addr(const void *buf, size_t size) {
 			sys_exit(-1);
 		}
 	}
-}
-
-void validate_fd(int fd) {
-	const struct thread *cur = thread_current();	
-	if (fd < 0 || fd > 512) {
-		sys_exit(-1);
-	}
-	// if (cur->fd_table[fd] == NULL) {
-	// 	sys_exit(-1);
-	// }
 }
 
 void validate_addr(const void *addr) {
