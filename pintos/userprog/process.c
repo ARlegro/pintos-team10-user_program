@@ -90,9 +90,8 @@ initd (void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	/* Clone current thread to new thread.*/
-	struct thread *parent = thread_current ();
-	sema_init(&parent->fork_sema, 0);
+    /* Clone current thread to new thread.*/
+    struct thread *parent = thread_current ();
 
 	// 1. 메모리 할당 
 	struct fork_args *args = palloc_get_page (0);
@@ -105,15 +104,20 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	args->parent = parent;
 	args->parent_intr_f = *if_;
 
-	// 3. thead_create() 호출 (전달할 데이터 전달하기)
-	tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, (void *) args);
-	if (tid == TID_ERROR){
-		palloc_free_page (args);
-		return TID_ERROR;
-	}
+    // 3. thead_create() 호출 (전달할 데이터 전달하기)
+    tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, (void *) args);
+    if (tid == TID_ERROR){
+        palloc_free_page (args);
+        return TID_ERROR;
+    }
 
-	// 4. 자식 신호 대기
-	sema_down(&parent->fork_sema);
+    // 4. 자식 신호 대기 (자식의 fork_sema를 기다림)
+    struct thread *child = find_child_thread_by_tid(tid);
+    if (child == NULL) {
+        palloc_free_page(args);
+        return TID_ERROR;
+    }
+    sema_down(&child->fork_sema);
 
 	// 5. 깬 뒤 메모리 정리 
 	palloc_free_page (args);
@@ -263,19 +267,17 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 		goto error;
 	} 
 
-	// 6. 부모 깨우기 
-	sema_up(&parent->fork_sema);
+    // 6. 부모 깨우기 (자식의 세마포어로 신호)
+    sema_up(&current->fork_sema);
 	current->tf.R.rax = 0;
 	do_iret (&current->tf);
 		
 error:
+    // 실패 시에도 부모를 깨워서 대기 해제
+    sema_up(&current->fork_sema);
 
-	if (parent != NULL){
-		sema_up(&parent->fork_sema);
-	}
-
-	sys_exit(-1);
-	// thread_exit ();
+    sys_exit(-1);
+    // thread_exit ();
 }
 
 /* Switch the current execution context to the f_name.
