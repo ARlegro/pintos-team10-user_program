@@ -302,7 +302,7 @@ int sys_open_file(const char *file){
 		return -1;
 	}
 
-	strlcpy(kernel_file, file, strlen(file) + 1);
+	strlcpy(kernel_file, file, PGSIZE);
 
 	// 락 걸기 
 	lock_acquire(&filesys_lock);
