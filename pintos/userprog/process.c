@@ -32,6 +32,7 @@ static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void *);
+static bool validate_user_vaddr(const void *addr);
 static int tokenize_command_line(char *command_line, char **argv);
 static void *push(struct intr_frame *interrupt_frame, const void *src, size_t n);
 static void align_stack(struct intr_frame *interrupt_frame);
@@ -86,49 +87,59 @@ initd (void *f_name) {
 }
 
 
-
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-    /* Clone current thread to new thread.*/
-    struct thread *parent = thread_current ();
+	bool result = validate_user_vaddr(name);
+	if (result == false){
+		return TID_ERROR;
+	}
 
+	char thread_name[16];
+	strlcpy(thread_name, name, sizeof(thread_name));
+	
 	// 1. 메모리 할당 
 	struct fork_args *args = palloc_get_page (0);
 	if (args == NULL){
 		return TID_ERROR;
 	}
 
-
 	// 2. 값 채워 넣기 
-	args->parent = parent;
+	args->parent = thread_current ();
 	args->parent_intr_f = *if_;
 
-    // 3. thead_create() 호출 (전달할 데이터 전달하기)
-    tid_t tid = thread_create (name, PRI_DEFAULT, __do_fork, (void *) args);
-    if (tid == TID_ERROR){
-        palloc_free_page (args);
-        return TID_ERROR;
-    }
+	// 3. thead_create() 호출 (전달할 데이터 전달하기)
+	tid_t tid = thread_create (thread_name, PRI_DEFAULT, __do_fork, (void *) args);
+	if (tid == TID_ERROR){
+			palloc_free_page (args);
+			return TID_ERROR;
+	}
 
-    // 4. 자식 신호 대기 (자식의 fork_sema를 기다림)
-    struct thread *child = find_child_thread_by_tid(tid);
-    if (child == NULL) {
-        palloc_free_page(args);
-        return TID_ERROR;
-    }
-    sema_down(&child->fork_sema);
-
-	// 5. 깬 뒤 메모리 정리 
-	palloc_free_page (args);
-
-	// 추가 : fork 했는데 자식이 뭔가 실패해서 자원 회수당한 경우 
-	if (find_child_thread_by_tid(tid) == NULL){
-		return TID_ERROR;
+	// 4. 자식 신호 대기 (자식의 fork_sema를 기다림)
+	struct thread *child = find_child_thread_by_tid(tid);
+	if (child == NULL) {
+			palloc_free_page(args);
+			return TID_ERROR;
 	}
 	
+	sema_down(&child->fork_sema);
+	// 5. 깬 뒤 메모리 정리 
+	palloc_free_page (args);
+	if (child->exit_status < 0) { // fork 실패 
+		tid = TID_ERROR;
+	}
+	// 자식 꺠워주기 
+	sema_up(&child->exit_sema);
 	return tid;
 }
+// 유저 가상주소인지 + 실제 매핑되어 있는지 검증 
+bool validate_user_vaddr(const void *addr) {
+	if (addr == NULL || !(is_user_vaddr(addr)) || pml4_get_page(thread_current()->pml4, addr) == NULL) {
+		return false;
+	}
+	return true;
+}
+
 
 #ifndef VM
 /**
@@ -212,7 +223,6 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
 	struct intr_frame parent_if = fork_args->parent_intr_f;
 
-	current->parent = parent;
 	bool succ = true;
 
 	// 2. 부모의 CPU 레지스터(유저 컨텍스트) 복사 
@@ -267,17 +277,17 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 		goto error;
 	} 
 
-    // 6. 부모 깨우기 (자식의 세마포어로 신호)
-    sema_up(&current->fork_sema);
+	// 6. 부모 깨우기 (자식의 fork_sema로 신호)
+	sema_up(&current->fork_sema);
+	current->exit_status = 0;
+	sema_down(&current->exit_sema);
+	
 	current->tf.R.rax = 0;
 	do_iret (&current->tf);
 		
 error:
-    // 실패 시에도 부모를 깨워서 대기 해제
-    sema_up(&current->fork_sema);
-
-    sys_exit(-1);
-    // thread_exit ();
+	// 실패 시 부모 꺠우는건 sys_exit에서 알아서 함 
+	sys_exit(-1);
 }
 
 /* Switch the current execution context to the f_name.
@@ -308,13 +318,15 @@ int process_exec (void *f_name) {
 	char *argv[MAX_ARGV];  // main에 넘길 argv는 이중 포인터
 	int argc = tokenize_command_line(command_line, argv);
 	if (argc == 0){
-		return -1;
+			palloc_free_page (f_name);
+			return -1;
 	}
 	
 	success = load (argv[0], &_if);
 	if (!success){
-		thread_current()->exit_status = -1;
-		return TID_ERROR;
+			thread_current()->exit_status = -1;
+			palloc_free_page (f_name);
+			return TID_ERROR;
 	}
 	
 	build_stack(&_if, argv, argc);
@@ -331,11 +343,10 @@ int process_exec (void *f_name) {
 tid_t syscall_process_execute (const char *file_name) {
 	char *fn_copy;
 	tid_t tid;
-	// if (!is_kernel_vaddr(file_name)){
-	// 	return -1;
-	// }
+	if (!validate_user_vaddr(file_name)) {
+		return TID_ERROR;
+	}
 
-	process_cleanup();
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL){
 		return TID_ERROR;
@@ -343,8 +354,7 @@ tid_t syscall_process_execute (const char *file_name) {
 		
 	strlcpy (fn_copy, file_name, PGSIZE);
 	tid = syscall_exec(fn_copy);
-	// tid = thread_create (thread_current()->name, PRI_DEFAULT, syscall_exec, fn_copy);
-	// sema_down(&thread_current()->wait_sema);
+	// 사실 여기 도달하면 무조건 TID_ERROR임 
 	if (tid == TID_ERROR){
 		palloc_free_page (fn_copy);		
 	}
@@ -362,11 +372,14 @@ tid_t syscall_exec(char *command_line){
 	char *argv[MAX_ARGV];
 	int argc = tokenize_command_line(command_line, argv);
 	if (argc == 0){
-		return TID_ERROR;
+			return TID_ERROR;
 	}
+
+	process_cleanup ();
+
 	success = load (argv[0], &_if);
 	if (!success){
-		return TID_ERROR;
+			return TID_ERROR;
 	}
 	
 	build_stack(&_if, argv, argc);
@@ -447,6 +460,8 @@ void align_stack(struct intr_frame *interrupt_frame) {
 	}
 }
 
+
+
 /* Waits for thread TID to die and returns its exit status.  If
  * it was terminated by the kernel (i.e. killed due to an
  * exception), returns -1.  If TID is invalid or if it was not a
@@ -476,8 +491,6 @@ int process_wait (tid_t child_tid UNUSED) {
 
 	// 2. 자식 종료까지 대기 
 	sema_down(&child->wait_sema);
-
-	//child->is_waited = false;
 
 	int status = child->exit_status;
 	list_remove(&child->child_elem);
@@ -513,14 +526,6 @@ void process_exit (void) {
 			}
 			free(entry);
 	}
-
-  // // 1) 부모가 있는 유저 스레드라면 부모를 깨운다
-  // if (cur->parent != NULL) {
-  //   // wait 중인 부모를 깨움
-  //   sema_up(&cur->wait_sema);
-  //   // 부모가 status를 회수할 때까지 대기
-  //   // sema_down(&cur->exit_sema);
-  // }
 
   // 2) 실행 파일/열린 파일 정리 (중복 없이 여기서만)
   if (cur->running_file) {

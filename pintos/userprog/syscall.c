@@ -96,7 +96,7 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_FORK:{
 			const char *thread_name = (char *) f->R.rdi;
 			cur->tf = *f;
-			f->R.rax = sys_fork(thread_name);
+			f->R.rax = process_fork(thread_name, &cur->tf);
 			break;
 		}
 			
@@ -195,14 +195,6 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 	}
 }
 
-pid_t sys_fork(const char *thread_name){
-	bool result = validate_user_vaddr(thread_name);
-	if (result == false){
-		return TID_ERROR;
-	}
-	return process_fork(thread_name, &thread_current()->tf);
-}
-
 /**
  * command_line으로 실행가능한 파일명 주어진 것 
  * Return 값 
@@ -232,6 +224,7 @@ bool validate_user_vaddr(const void *addr) {
 	}
 	return true;
 }
+
 
 uint64_t sys_get_file_length(int fd) {
 	struct file *file_ptr = find_file_by_fd(fd);
@@ -337,13 +330,6 @@ void sys_exit(int status){
 	struct thread *cur = thread_current();
 	cur->exit_status = status;
 	printf("%s: exit(%d)\n", cur->name, status);
-
-	// if (cur->parent != NULL){
-	// 	if (cur->running_file){
-	// 		file_allow_write(cur->running_file);
-	// 		file_close(cur->running_file);
-	// 		cur->running_file = NULL;
-	// 	}
 
   if (cur->parent != NULL) {
     sema_up(&cur->wait_sema);          
