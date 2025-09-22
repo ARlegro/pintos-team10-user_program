@@ -331,9 +331,10 @@ void sys_exit(int status){
 	// 		cur->running_file = NULL;
 	// 	}
 
-	// 	sema_up(&cur->wait_sema);  
-	// 	sema_down(&cur->exit_sema);
-	// }
+  if (cur->parent != NULL) {
+    sema_up(&cur->wait_sema);          
+    sema_down(&cur->exit_sema);        
+  }
 	
 	thread_exit();
 }

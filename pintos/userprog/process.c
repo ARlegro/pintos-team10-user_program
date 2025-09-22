@@ -20,6 +20,8 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "userprog/syscall.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -273,7 +275,8 @@ error:
 		sema_up(&parent->fork_sema);
 	}
 
-	thread_exit ();
+	sys_exit(-1);
+	// thread_exit ();
 }
 
 /* Switch the current execution context to the f_name.
@@ -509,14 +512,13 @@ void process_exit (void) {
 			free(entry);
 	}
 
-  // 1) 부모가 있는 유저 스레드라면 부모를 깨운다
-  if (cur->parent != NULL) {
-    // wait 중인 부모를 깨움
-    sema_up(&cur->wait_sema);
-
-    // 부모가 status를 회수할 때까지 대기
-    sema_down(&cur->exit_sema);
-  }
+  // // 1) 부모가 있는 유저 스레드라면 부모를 깨운다
+  // if (cur->parent != NULL) {
+  //   // wait 중인 부모를 깨움
+  //   sema_up(&cur->wait_sema);
+  //   // 부모가 status를 회수할 때까지 대기
+  //   // sema_down(&cur->exit_sema);
+  // }
 
   // 2) 실행 파일/열린 파일 정리 (중복 없이 여기서만)
   if (cur->running_file) {
