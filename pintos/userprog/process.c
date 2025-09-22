@@ -100,6 +100,7 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 		return TID_ERROR;
 	}
 
+
 	// 2. 값 채워 넣기 
 	args->parent = parent;
 	args->parent_intr_f = *if_;
@@ -244,14 +245,11 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 			
 			struct fd_table_entry *child_entry = malloc(sizeof(struct fd_table_entry));
 			if (child_entry == NULL){
-				succ = false;
-				break;
+				goto error;
 			}
 
 			child_entry->fd = parent_entry->fd;
 			child_entry->file = file_duplicate(parent_entry->file);
-			//child_entry->file = file_reopen(parent_entry->file);
-			//file_seek(child_entry->file, 0);
 			list_push_back(&current->fd_table, &child_entry->elem);
 		}
 	}
@@ -335,6 +333,7 @@ tid_t syscall_process_execute (const char *file_name) {
 	// 	return -1;
 	// }
 
+	process_cleanup();
 	fn_copy = palloc_get_page (0);
 	if (fn_copy == NULL){
 		return TID_ERROR;
