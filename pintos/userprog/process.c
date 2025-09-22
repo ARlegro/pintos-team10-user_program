@@ -108,6 +108,7 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	args->parent = thread_current ();
 	args->parent_intr_f = *if_;
 	args->is_forked = true;
+	sema_init(&args->fork_sema, 0);
 
 	// 3. thead_create() 호출 (전달할 데이터 전달하기)
 	tid_t tid = thread_create (thread_name, PRI_DEFAULT, __do_fork, (void *) args);
@@ -123,10 +124,12 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 			return TID_ERROR;
 	}
 	
-	sema_down(&child->fork_sema);
+	sema_down(&args->fork_sema);
 	// 5. 깬 뒤 메모리 정리 
-	if (!(args->is_forked)) { // fork 실패 
+	if (args->is_forked == false) { // fork 실패 
 		tid = TID_ERROR;
+		list_remove(&child->child_elem);
+		sema_up(&child->exit_sema); // 자식도 정리하라고 깨우기
 	}
 	palloc_free_page (args);
 	
@@ -278,14 +281,18 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	} 
 
 	// 6. 부모 깨우기 (자식의 fork_sema로 신호)
-	sema_up(&current->fork_sema);	
+	sema_up(&fork_args->fork_sema);	
 	current->tf.R.rax = 0;
 	do_iret (&current->tf);
 		
 error:
 	// 실패 시 부모 꺠우는건 sys_exit에서 알아서 함 
 	fork_args->is_forked = false;
-	sema_up(&current->fork_sema);
+	sema_up(&fork_args->fork_sema);
+	
+	// test 
+	sema_init(&current->exit_sema, 0);
+	sema_down(&current->exit_sema);
 	thread_exit();
 }
 

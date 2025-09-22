@@ -169,11 +169,11 @@ page_fault (struct intr_frame *f) {
     return;
   }
 
-	// case 2. 유저가 커널 영역 읽기, 쓰기 금지 처리 
-	if (user && is_kern_pte((uint64_t *)fault_addr)) {
-		sys_exit(-1);
-		return;
-	} 
+	// // case 2. 유저가 커널 영역 읽기, 쓰기 금지 처리 
+	// if (user && is_kern_pte((uint64_t *)fault_addr)) {
+	// 	sys_exit(-1);
+	// 	return;
+	// } 
 
 	kill (f);
 }
