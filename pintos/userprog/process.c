@@ -92,6 +92,7 @@ initd (void *f_name) {
 tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	/* Clone current thread to new thread.*/
 	struct thread *parent = thread_current ();
+	sema_init(&parent->fork_sema, 0);
 
 	// 1. 메모리 할당 
 	struct fork_args *args = palloc_get_page (0);
@@ -439,7 +440,7 @@ void build_stack(struct intr_frame *interrupt_frame, char *argv[], int argc) {
 }
 
 void align_stack(struct intr_frame *interrupt_frame) {
-	while ((interrupt_frame->rsp % 8) != 0){
+	while ((interrupt_frame->rsp % 16) != 0){
 		uint8_t zero = 0;
 		push(interrupt_frame, &zero, 1);
 	}
