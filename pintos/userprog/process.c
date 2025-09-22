@@ -204,7 +204,7 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
 	struct intr_frame parent_if = fork_args->parent_intr_f;
 
-	//current->parent = parent;
+	current->parent = parent;
 	bool succ = true;
 
 	// 2. 부모의 CPU 레지스터(유저 컨텍스트) 복사 
@@ -372,6 +372,7 @@ tid_t syscall_exec(char *command_line){
 }
 
 
+
 // return arg count
 int tokenize_command_line(char *command_line, char **argv) {
 	char *save_ptr = NULL;
@@ -471,7 +472,7 @@ int process_wait (tid_t child_tid UNUSED) {
 	// 2. 자식 종료까지 대기 
 	sema_down(&child->wait_sema);
 
-	child->is_waited = false;
+	//child->is_waited = false;
 
 	int status = child->exit_status;
 	list_remove(&child->child_elem);
@@ -508,14 +509,21 @@ void process_exit (void) {
 			free(entry);
 	}
 
-	// struct thread *cur = thread_current();
-	// struct file *running_file = cur->running_file;
-	// if (running_file != NULL){
-	// 	file_allow_write(running_file);
-	// 	file_close(running_file);
-	// 	cur->running_file = NULL;
-	// }
+  // 1) 부모가 있는 유저 스레드라면 부모를 깨운다
+  if (cur->parent != NULL) {
+    // wait 중인 부모를 깨움
+    sema_up(&cur->wait_sema);
 
+    // 부모가 status를 회수할 때까지 대기
+    sema_down(&cur->exit_sema);
+  }
+
+  // 2) 실행 파일/열린 파일 정리 (중복 없이 여기서만)
+  if (cur->running_file) {
+    file_allow_write(cur->running_file);
+    file_close(cur->running_file);
+    cur->running_file = NULL;
+  }
 
 	process_cleanup ();
 }

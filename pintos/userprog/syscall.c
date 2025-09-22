@@ -96,7 +96,7 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 		case SYS_FORK:{
 			const char *thread_name = (char *) f->R.rdi;
 			cur->tf = *f;
-			f->R.rax = sys_fork(thread_name);
+			f->R.rax = process_fork(thread_name, &thread_current()->tf);
 			break;
 		}
 			
@@ -113,9 +113,8 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			
 
 		case SYS_WAIT:{
-			// int wait (pid_t pid) 
 			pid_t child_pid = (pid_t) f->R.rdi;
-			f->R.rax = sys_wait(child_pid);
+			f->R.rax = process_wait(child_pid);
 			break;
 		}
 			
@@ -227,19 +226,6 @@ bool validate_user_vaddr(const void *addr) {
 	return true;
 }
 
-
-pid_t sys_wait(pid_t child_tid){
-	return process_wait(child_tid);
-}
-
-
-
-pid_t sys_fork(const char *thread_name) {  
-	tid_t child_tid = process_fork(thread_name, &thread_current()->tf);
-	return (child_tid < 0) ? -1 : child_tid;
-}
-
-
 uint64_t sys_get_file_length(int fd) {
 	struct file *file_ptr = find_file_by_fd(fd);
 	if (file_ptr == NULL){
@@ -338,16 +324,16 @@ void sys_exit(int status){
 	cur->exit_status = status;
 	printf("%s: exit(%d)\n", cur->name, status);
 
-	if (cur->parent != NULL){
-		if (cur->running_file){
-			file_allow_write(cur->running_file);
-			file_close(cur->running_file);
-			cur->running_file = NULL;
-		}
+	// if (cur->parent != NULL){
+	// 	if (cur->running_file){
+	// 		file_allow_write(cur->running_file);
+	// 		file_close(cur->running_file);
+	// 		cur->running_file = NULL;
+	// 	}
 
-		sema_up(&cur->wait_sema);  
-		sema_down(&cur->exit_sema);
-	}
+	// 	sema_up(&cur->wait_sema);  
+	// 	sema_down(&cur->exit_sema);
+	// }
 	
 	thread_exit();
 }
