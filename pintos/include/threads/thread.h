@@ -145,6 +145,7 @@ struct fork_args
 {
 	struct thread *parent;
 	struct intr_frame parent_intr_f;
+	struct semaphore fork_sema;
 	bool is_forked;
 };
 #endif

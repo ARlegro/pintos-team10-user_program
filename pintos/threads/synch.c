@@ -143,9 +143,11 @@ void sema_up (struct semaphore *sema) {
 	intr_set_level (old_level);
 
 	// 깨웠으니 양보해야지 
-	if (next && next->eff_priority > thread_current()->eff_priority) {
+	if (next){
 		if (intr_context()) intr_yield_on_return();
-		else thread_yield();
+		else if (next->eff_priority > thread_current()->eff_priority){
+			thread_yield();
+		}
 	}
 }
 
