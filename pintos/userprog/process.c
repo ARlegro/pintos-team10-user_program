@@ -107,6 +107,7 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	// 2. 값 채워 넣기 
 	args->parent = thread_current ();
 	args->parent_intr_f = *if_;
+	args->is_forked = true;
 
 	// 3. thead_create() 호출 (전달할 데이터 전달하기)
 	tid_t tid = thread_create (thread_name, PRI_DEFAULT, __do_fork, (void *) args);
@@ -124,12 +125,11 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	
 	sema_down(&child->fork_sema);
 	// 5. 깬 뒤 메모리 정리 
-	palloc_free_page (args);
-	if (child->exit_status < 0) { // fork 실패 
+	if (!(args->is_forked)) { // fork 실패 
 		tid = TID_ERROR;
 	}
-	// 자식 꺠워주기 
-	sema_up(&child->exit_sema);
+	palloc_free_page (args);
+	
 	return tid;
 }
 // 유저 가상주소인지 + 실제 매핑되어 있는지 검증 
@@ -278,15 +278,13 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	} 
 
 	// 6. 부모 깨우기 (자식의 fork_sema로 신호)
-	sema_up(&current->fork_sema);
-	current->exit_status = 0;
-	sema_down(&current->exit_sema);
-	
+	sema_up(&current->fork_sema);	
 	current->tf.R.rax = 0;
 	do_iret (&current->tf);
 		
 error:
 	// 실패 시 부모 꺠우는건 sys_exit에서 알아서 함 
+	fork_args->is_forked = false;
 	sys_exit(-1);
 }
 
