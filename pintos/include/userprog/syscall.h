@@ -6,12 +6,20 @@
 void syscall_init (void);
 
 // Project_2
+typedef int pid_t;
+
 void halt (void);
 void exit (int);
+pid_t fork(const char *thread_name);
+int exec (const char *cmd_line);
 bool create (const char *file, unsigned initial_size);
 bool remove (const char *file);
 int open(const char *file);
+int filesize (int fd);
+int read(int fd, void *buffer, unsigned size);
 int write (int fd, const void *buffer, unsigned length);
+void seek (int fd, unsigned position);
+int tell (int fd);
 void close(int fd);
 void check_address (void *addr);
 

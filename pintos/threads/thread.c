@@ -210,6 +210,7 @@ tid_t thread_create (const char *name, int priority, thread_func *function, void
 	t->fdt[1] = 1;												// 표준 출력(STDOUT)
 	t->fdt[2] = 2;												// 표준 에러(STDERR)
 	
+	list_push_back(&thread_current()->child_list, &t->child_elem);
 	#endif
 
 	/* Call the kernel_thread if it scheduled.
@@ -483,6 +484,14 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->eff_priority = priority;
 	t->magic = THREAD_MAGIC;
+
+	// Project_2
+	t->runn_file = NULL;									// 현재 실행 중인 파일을 가르킴
+
+	list_init(&t->child_list);								// 자식 프로세스 리스트
+	sema_init(&t->fork_sema, 0);							// fork() 동기화를 위한 세마포어
+	sema_init(&t->exit_sema, 0);							// 종료 동기화를 위한 세마포어
+	sema_init(&t->wait_sema, 0);							// 부모가 wait() 할 때 동기화를 위한 세마포어
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

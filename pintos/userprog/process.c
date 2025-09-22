@@ -19,6 +19,9 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "threads/synch.h"
+#ifdef USERPROG
+#include "userprog/syscall.h"
+#endif
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -241,15 +244,16 @@ process_exec (void *f_name) {
 	/* 그리고 바이너리를 적재한다. */
 	success = load (file_first_name, &fr);
 
+	/* If load failed, quit. */
+	/* 적재에 실패하면 종료한다. */
+	if (!success)
+			return -1;
+
 	//Project_2
 	argument_stack (arg_list, arg_cnt, &fr);
 
-	/* If load failed, quit. */
-	/* 적재에 실패하면 종료한다. */
-	// palloc_free_page (file_name);
-	if (!success)
-		return -1;
-
+	palloc_free_page (file_name);
+	
     //hex_dump(fr.rsp, fr.rsp, USER_STACK - fr.rsp, true); // 0x47480000	
 
 	/* Start switched process. */
@@ -276,15 +280,21 @@ process_exec (void *f_name) {
  * 이 함수는 문제 2-2에서 구현된다. 현재는 아무 것도 하지 않는다. */
 int
 process_wait (tid_t child_tid UNUSED) {
-	/* 1. 자식 목록 + 엔트리 구조체
-	   2. 소유권/수거 규칙3. 동기화
-	   4. 예외 케이스 처리
-	   5. 부모/자식 연결
-	*/
+	struct thread *child = get_child_process(child_tid);
 
-	for(int i = 0; i < 1000000000; i++);
+	if (child == NULL)
+	{
+		return -1;
+	}
 
-	return -1;
+	sema_down(&child->wait_sema);
+
+	int exit_status = child->exit_status;
+	list_remove(&child->child_elem);
+
+	sema_up(&child->exit_sema);
+
+	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -292,15 +302,29 @@ process_wait (tid_t child_tid UNUSED) {
 void
 process_exit (void) {
 	struct thread *curr = thread_current ();
-	/* TODO: Your code goes here.
-	 * TODO: Implement process termination message (see
-	 * TODO: project2/process_termination.html).
-	 * TODO: We recommend you to implement process resource cleanup here. */
-	/* TODO: 여기에 구현한다.
-	 * TODO: 프로세스 종료 메시지를 구현한다(참고: project2/process_termination.html).
-	 * TODO: 프로세스 자원 정리를 여기에서 수행하는 것을 권장한다. */
 
-	process_cleanup ();
+	if (curr->runn_file)
+	{
+		file_allow_write(curr->runn_file);
+		file_close(curr->runn_file);										// 실행 파일 닫기
+		curr->runn_file = NULL;
+	}
+
+	for (int fd = 0; fd < curr->fd_idx; fd++)							// 열려있던 파일 디스크립터 닫기
+	{
+		close(fd);
+	}
+
+	if (curr->fdt)
+	{
+		palloc_free_multiple(curr->fdt, FDT_PAGES);							// 파일 디스크립터 테이블 메모리 반환
+	}
+
+	process_cleanup ();													// 프로세스 페이지 테이블 정리
+
+	sema_up(&curr->wait_sema);											// 부모에게 끝났음을 알림
+
+	sema_down(&curr->exit_sema);										// 부모가 수거 할때까지 대기
 }
 
 /* Free the current process's resources. */
@@ -451,6 +475,11 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
+	// Project_2
+	// 파일 명시 및 파일 쓰기 거부
+	t->runn_file = file;
+	file_deny_write(file);
+
 	/* Read and verify executable header. */
 	/* 실행 파일 헤더를 읽고 검증한다. */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -543,7 +572,19 @@ load (const char *file_name, struct intr_frame *if_) {
 done:
 	/* We arrive here whether the load is successful or not. */
 	/* 성공/실패 여부와 관계없이 이곳으로 온다. */
-	file_close (file);
+	// file_close (file);
+
+	// 실패 시 파일을 닫고 NULL로 초기화
+	if (!success)
+	{
+		if (file)
+		{
+			file_close(file);
+		}
+		
+		t->runn_file = NULL;
+	}
+
 	return success;
 }
 
@@ -866,6 +907,24 @@ void argument_stack(char **argv, int argc, struct intr_frame *fr)
 	fr->R.rsi = fr->rsp + 8;								
 }
 
+// 현재 프로세스의 자식 리스트를 검색하여 해당 pid에 맞틑 프로세스 디스크립터를 반환, 없으면 NULL
+struct thread *get_child_process(int pid)
+{
+	struct thread *curr = thread_current();
+	struct thread *t;
+
+	for (struct list_elem *e = list_begin(&curr->child_list); e != list_end(&curr->child_list); e = list_next(e))
+	{
+		t = list_entry(e, struct thread, child_elem);
+
+		if (pid == t->tid)
+		{
+			return t;
+		}
+	}	
+
+	return NULL;										
+}
 
 int fd_table_add_file(struct file *p_file)
 {

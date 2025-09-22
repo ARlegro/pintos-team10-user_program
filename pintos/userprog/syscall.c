@@ -11,9 +11,16 @@
 #include "filesys/filesys.h"
 #include "lib/kernel/stdio.h"
 #include "filesys/file.h"
+#include "threads/synch.h"
+#ifdef USERPROG
+#include "threads/palloc.h"
+#include "string.h"
+#endif
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
+
+struct lock filesys_lock;
 
 /* System call.
  *
@@ -53,6 +60,10 @@ syscall_init (void) {
 	 * 따라서 EFLAGS의 해당 비트들을 마스킹한다. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+
+	// Project_2
+	// read & write 용 lock 초기화
+	lock_init(&filesys_lock);
 }
 
 /* The main system call interface */
@@ -76,6 +87,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		//fork(f->R.rdi);
 		break;
 	case SYS_EXEC:
+		f->R.rax = exec(f->R.rdi);
 		break;
 	case SYS_WAIT:
 		f->R.rax = process_wait(f->R.rdi);
@@ -90,15 +102,19 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		f->R.rax = open(f->R.rdi);
 		break;
 	case SYS_FILESIZE:
+		f->R.rax = filesize(f->R.rdi);
 		break;
 	case SYS_READ:
+		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	case SYS_WRITE:
 		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	case SYS_SEEK:
+		seek(f->R.rdi, f->R.rsi);
 		break;
 	case SYS_TELL:
+		f->R.rax = tell(f->R.rdi);
 		break;
 	case SYS_CLOSE:
 		close(f->R.rdi);
@@ -113,7 +129,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 
 void halt(void)
 {
-	power_off();
+	power_off();											// 프로세스가 죽는다
 }
 
 void exit(int status)
@@ -122,6 +138,39 @@ void exit(int status)
 	t->exit_status = status;
 	printf("%s: exit(%d)\n", t->name, status);
 	thread_exit();
+}
+
+pid_t fork (const char *thread_name)
+{
+	check_address(thread_name);
+
+	return process_fork(thread_name, NULL);
+}
+
+int exec (const char *cmd_line)
+{
+	check_address(cmd_line);
+
+	size_t cmd_size = strlen(cmd_line) + 1;				
+
+	// 메모리 할당
+	char *temp_buf = palloc_get_page(PAL_ZERO);
+	
+	if (temp_buf == NULL)
+	{
+		return -1;
+	}
+	
+	// 커널 공간에 복사
+	memcpy(temp_buf, cmd_line, cmd_size);
+
+	// 프로세스 실행
+	if (process_exec(temp_buf) == -1)
+	{
+		return -1;
+	}	
+
+	return 0;
 }
 
 bool create(const char *file, unsigned initial_size)
@@ -158,17 +207,99 @@ int open(const char *file)
 	return fd;
 }
 
-int write(int fd, const void *buffer, unsigned length)
+int filesize (int fd)
 {
-	int byte = 0;											// 실제로 기록한 바이트 수
+	struct file *p_file = fd_table_get_file(fd);
 
-	if (fd == 1)											// 표준 출력일 경우만 처리
+	if (p_file == NULL)
 	{
-		putbuf(buffer, length);								// 콘솔 버퍼에 문자열 출력
-		byte = length;										
+		return -1;
 	}
 
-	return byte;											// 출력한 바이트 수 반환
+	return file_length(p_file);
+}
+
+int read(int fd, void *buffer, unsigned size)
+{
+	if (size == 0) return 0;
+
+	check_address(buffer);
+
+	struct file *p_file = fd_table_get_file(fd);				// fd에 해당하는 파일 구조체를 가져옴
+	int bytes = -1;												// 실패 시 -1 반환
+
+	// 표준 입력 (키보드)
+	if (fd == 0)
+	{
+		for (unsigned i = 0; i < size; i++)						// 한 글자씩 읽어서 buffer에 저장
+		{
+			((char *)buffer)[i] = input_getc();					// 키보드로부터 문자 하나 입력받기
+		}
+
+		bytes = (int)size;
+		return bytes;
+	}
+
+	if (fd < 3 || p_file == NULL)								// stdout/stderr는 read 불가
+	{
+		return -1;
+	}
+																// 일반 파일, fd가 0이 아니고, fd 테이블에 해당 파일이 존재할 때
+	lock_acquire(&filesys_lock);								// 파일 시스템은 공유 자원이므로 동시 접근 방지를 위해 lock 획득
+	bytes = file_read(p_file, buffer, size);					// p_file에서 size 바이트를 읽어서 buffer에 저장
+	lock_release(&filesys_lock);								// 다 읽었으면 lock 해제
+	
+	return bytes;
+}
+
+int write(int fd, const void *buffer, unsigned length)
+{
+	check_address(buffer);
+
+	struct file *p_file = fd_table_get_file(fd);				
+	off_t bytes = -1;											// 실제로 기록한 바이트 수
+
+	if (fd <= 0 || p_file == NULL)
+	{
+		return -1;
+	}
+
+	if (fd < 3)													// 표준 출력일 경우만 처리
+	{	
+		putbuf(buffer, length);									// 콘솔 버퍼에 문자열 출력
+		bytes = length;		
+		return bytes;									
+	}	
+	
+	lock_acquire(&filesys_lock);
+	bytes = file_write(p_file, buffer, length);
+	lock_release(&filesys_lock);		
+	
+	return bytes;												// 출력한 바이트 수 반환
+}
+
+void seek (int fd, unsigned position)
+{
+	struct file *p_file = fd_table_get_file(fd);
+
+	if (fd < 3 || p_file == NULL)
+	{
+		return;
+	}
+
+	file_seek(p_file, position);
+}
+
+int tell (int fd)
+{
+	struct file *p_file = fd_table_get_file(fd);
+
+	if (fd < 3 || p_file == NULL)
+	{
+		return;
+	}
+
+	return file_tell(p_file);
 }
 
 void close(int fd)

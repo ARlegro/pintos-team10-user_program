@@ -41,7 +41,10 @@
     "process.h": "c",
     "*.inc": "c",
     "syscall.h": "c",
-    "lib.h": "c"
+    "lib.h": "c",
+    "palloc.h": "c",
+    "file.h": "c",
+    "string.h": "c"
   },
   "C_Cpp.default.compilerPath": "/usr/bin/gcc"
 }

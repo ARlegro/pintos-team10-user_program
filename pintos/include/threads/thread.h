@@ -5,6 +5,9 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#ifdef USERPROG
+#include "synch.h"
+#endif
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -114,8 +117,18 @@ struct thread {
 	#define FDCOUNT_LIMIT		FDT_PAGES * (1 << 9)			// 한 페이지에는 512개의 포인터를 담을 수 있다. 3 * 512 = 1536개 슬롯 (2^9 = 512)
 
 	int exit_status;
+
 	int fd_idx;							// 파일 디스크립터 인덱스
 	struct file **fdt;					// 파일 디스크립터 테이블
+	struct file *runn_file;				// 실행중인 파일
+
+	struct intr_frame parent_if;		// 부모 프로세스 if
+	struct list child_list;
+	struct list_elem child_elem;
+
+	struct semaphore fork_sema;			// 부모가 fork() 호출 시, 자식이 제대로 생성될 때까지 대기하는 동기화 도구
+	struct semaphore exit_sema;			// 프로세스 종료시 부모가 자식의 종료를 감지할 수 있도록 대기/해제
+	struct semaphore wait_sema;			// process_wait()에서 특정 자식이 끝날 때까지 부모를 대기시킬 때 사용
 #endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */

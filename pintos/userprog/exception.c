@@ -164,14 +164,10 @@ kill (struct intr_frame *f) {
    "Interrupt 14--Page Fault Exception (#PF)"를 참고하라. */
 static void
 page_fault (struct intr_frame *f) {
-	bool not_present;  /* True: not-present page, false: writing r/o page. */
-	/* true: 존재하지 않는 페이지, false: 읽기 전용 페이지에 쓰기 */
-	bool write;        /* True: access was write, false: access was read. */
-	/* true: 쓰기 접근, false: 읽기 접근 */
-	bool user;         /* True: access by user, false: access by kernel. */
-	/* true: 사용자 접근, false: 커널 접근 */
-	void *fault_addr;  /* Fault address. */
-	/* 폴트가 발생한 주소 */
+	bool not_present;  /* True: not-present page, false: writing r/o page. */	/* true: 존재하지 않는 페이지, false: 읽기 전용 페이지에 쓰기 */
+	bool write;        /* True: access was write, false: access was read. */	/* true: 쓰기 접근, false: 읽기 접근 */
+	bool user;         /* True: access by user, false: access by kernel. */		/* true: 사용자 접근, false: 커널 접근 */
+	void *fault_addr;  /* Fault address. */										/* 폴트가 발생한 주소 */
 
 	/* Obtain faulting address, the virtual address that was
 	   accessed to cause the fault.  It may point to code or to
@@ -186,7 +182,6 @@ page_fault (struct intr_frame *f) {
 	   be assured of reading CR2 before it changed). */
 	/* 인터럽트를 다시 켠다. (CR2를 읽는 동안 값이 변하지 않도록 잠시 껐던 것임) */
 	intr_enable ();
-
 
 	/* Determine cause. */
 	/* 원인 판별 */
@@ -204,6 +199,8 @@ page_fault (struct intr_frame *f) {
 	/* Count page faults. */
 	/* 페이지 폴트 횟수 증가 */
 	page_fault_cnt++;
+
+	exit(-1);																	// 테스트가 “프로세스가 종료했다”를 기대
 
 	/* If the fault is true fault, show info and exit. */
 	/* 실제 폴트라면 정보 출력 후 종료 */
