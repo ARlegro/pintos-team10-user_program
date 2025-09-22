@@ -285,7 +285,8 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 error:
 	// 실패 시 부모 꺠우는건 sys_exit에서 알아서 함 
 	fork_args->is_forked = false;
-	sys_exit(-1);
+	sema_up(&current->fork_sema);
+	thread_exit();
 }
 
 /* Switch the current execution context to the f_name.
