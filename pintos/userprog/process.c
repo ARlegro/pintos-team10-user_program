@@ -95,10 +95,28 @@ initd (void *f_name) {
  * 생성 실패 시 TID_ERROR를 반환한다. */
 tid_t
 process_fork (const char *name, struct intr_frame *if_ UNUSED) {
-	/* Clone current thread to new thread.*/
-	/* 현재 스레드를 새 스레드로 복제한다. */
-	return thread_create (name,
-			PRI_DEFAULT, __do_fork, thread_current ());
+	struct thread *curr = thread_current();													// 현재 스레드 가져오기
+
+	struct intr_frame *p_if = (pg_round_up(rrsp()) - sizeof(struct intr_frame));			// 현재 레지스터의 rsp의 값을 읽음 (스택 꼭대기 주소) -> 스택 포인터 값을 다음 페이지 경계로 올림
+	memcpy(&curr->backup_if, p_if, sizeof(struct intr_frame));								// 부모의 레지스터 상태 자신의 구조체(curr->backup_if)에 따로 저장
+
+	tid_t child_tid = thread_create(name, PRI_DEFAULT, __do_fork, curr); 					// 현재 스레드를 새 스레드로 복제한다
+
+	if (child_tid == TID_ERROR)
+	{
+		return TID_ERROR;
+	}
+
+	struct thread *child = get_child_process(child_tid);									// 현재 프로세스의 child_list에서 child_tid를 찾아서 thread * 리턴
+
+	sema_down(&child->fork_sema);															// 부모가 자식의 초기화가 끝날 때까지 기다림 자식이 올바르게 준비된 상태임을 보장
+	
+	if (child->exit_status == TID_ERROR)
+	{
+		return TID_ERROR;
+	}
+
+	return child_tid;   																	// 생성한 자식 프로세스의 tid
 }
 
 #ifndef VM
@@ -231,10 +249,10 @@ process_exec (void *f_name) {
 	 * it stores the execution information to the member. */
 	/* thread 구조체 안의 intr_frame은 사용할 수 없다.
 	 * 현재 스레드가 리스케줄될 때 실행 정보가 해당 멤버에 저장되기 때문이다. */
-	struct intr_frame fr;
-	fr.ds = fr.es = fr.ss = SEL_UDSEG;
-	fr.cs = SEL_UCSEG;
-	fr.eflags = FLAG_IF | FLAG_MBS;
+	struct intr_frame if_;
+	if_.ds = if_.es = if_.ss = SEL_UDSEG;
+	if_.cs = SEL_UCSEG;
+	if_.eflags = FLAG_IF | FLAG_MBS;
 
 	/* We first kill the current context */
 	/* 먼저 현재 컨텍스트를 종료(cleanup)한다. */
@@ -242,7 +260,7 @@ process_exec (void *f_name) {
 
 	/* And then load the binary */
 	/* 그리고 바이너리를 적재한다. */
-	success = load (file_first_name, &fr);
+	success = load (file_first_name, &if_);
 
 	/* If load failed, quit. */
 	/* 적재에 실패하면 종료한다. */
@@ -250,7 +268,7 @@ process_exec (void *f_name) {
 			return -1;
 
 	//Project_2
-	argument_stack (arg_list, arg_cnt, &fr);
+	argument_stack (arg_list, arg_cnt, &if_);
 
 	palloc_free_page (file_name);
 	
@@ -258,7 +276,7 @@ process_exec (void *f_name) {
 
 	/* Start switched process. */
 	/* 전환된 프로세스를 시작한다. */
-	do_iret (&fr);
+	do_iret (&if_);
 	NOT_REACHED ();
 }
 

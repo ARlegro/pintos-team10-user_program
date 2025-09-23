@@ -122,8 +122,8 @@ struct thread {
 	struct file **fdt;					// 파일 디스크립터 테이블
 	struct file *runn_file;				// 실행중인 파일
 
-	struct intr_frame parent_if;		// 부모 프로세스 if
-	struct list child_list;
+	struct intr_frame backup_if;		// 현재 프로세스의 if 백업
+	struct list child_list; 
 	struct list_elem child_elem;
 
 	struct semaphore fork_sema;			// 부모가 fork() 호출 시, 자식이 제대로 생성될 때까지 대기하는 동기화 도구
