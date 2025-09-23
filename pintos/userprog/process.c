@@ -520,7 +520,6 @@ void process_exit (void) {
 
   // 2) 실행 파일/열린 파일 정리 (중복 없이 여기서만)
   if (cur->running_file) {
-    file_allow_write(cur->running_file);
     file_close(cur->running_file);
     cur->running_file = NULL;
   }
