@@ -140,19 +140,17 @@ void sema_up (struct semaphore *sema) {
 	
 	// 값 증가 
 	sema->value++;
-	intr_set_level (old_level);
-
-	if (!next){
-		return;
-	}
-
 	// 깨웠으니 양보해야지 
-	
-	if (intr_context()) {
-		intr_yield_on_return();
-	} else if (next->eff_priority > thread_current()->eff_priority){
-		thread_yield();
+
+	if (next){
+		if (intr_context()) {
+		 	intr_yield_on_return();
+		} else if (next->eff_priority > thread_current()->eff_priority){
+			intr_set_level (old_level);
+			thread_yield();
+		}
 	}
+	intr_set_level (old_level);
 }
 
 static void sema_test_helper (void *sema_);
