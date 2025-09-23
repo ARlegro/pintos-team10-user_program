@@ -276,7 +276,6 @@ error:
 	fork_args->is_forked = false;
 	sema_up(&fork_args->fork_sema);
 	// test 
-	// sema_init(&current->exit_sema, 0);
 	sema_down(&current->exit_sema);
 	thread_exit();
 }
