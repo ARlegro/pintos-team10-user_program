@@ -251,7 +251,6 @@ int sys_open_file(const char *file){
 	if (kernel_file == NULL){
 		return -1;
 	}
-
 	strlcpy(kernel_file, file, PGSIZE);
 
 	// 락 걸기 

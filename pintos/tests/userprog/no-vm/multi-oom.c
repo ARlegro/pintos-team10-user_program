@@ -115,10 +115,10 @@ make_children (void) {
   int pid;
   char child_name[128];
   for (; ; random_init (i), i++) {
-    //printf("테스트 중 i = %d\n", i);
-    //printf("테스트 중 pid = %d\n", pid);
+    printf("테스트 중 i = %d\n", i);
+    printf("테스트 중 pid = %d\n", pid);
     if (i > EXPECTED_DEPTH_TO_PASS/2) {
-      //printf("===========5이상인 경우=======\n");
+      printf("===========5이상인 경우=======\n");
       snprintf (child_name, sizeof child_name, "%s_%d_%s", "child", i, "X");
       pid = fork(child_name);
       if (pid > 0 && wait (pid) != -1) {
@@ -128,10 +128,10 @@ make_children (void) {
         fail ("Unreachable");
       }
     }
-    //printf("===========공통인 경우=======\n");
+    printf("===========공통인 경우=======\n");
     snprintf (child_name, sizeof child_name, "%s_%d_%s", "child", i, "O");
     pid = fork(child_name);
-    //printf("공통 fork 후 pid = %d\n", pid);
+    printf("공통 fork 후 pid = %d\n", pid);
     if (pid < 0) {
       exit (i);
     } else if (pid == 0) {
@@ -141,9 +141,9 @@ make_children (void) {
     }
   }
 
-  //printf("부모는 자식(pid = %d)을 기다립니다\n", pid);
+  printf("부모는 자식(pid = %d)을 기다립니다\n", pid);
   int depth = wait (pid);
-  //printf("===========WAIT 이후 depth = %d=======\n", depth);
+  printf("===========WAIT 이후 depth = %d=======\n", depth);
   if (depth < 0)
 	  fail ("Should return > 0.");
 
