@@ -125,12 +125,14 @@ tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED) {
 	
 	sema_down(&args->fork_sema);
 	// 5. 깬 뒤 메모리 정리 
-	if (args->is_forked == false) { // fork 실패 
+	bool is_forked = args->is_forked;
+	palloc_free_page (args);
+	if (is_forked == false) { // fork 실패 
 		tid = TID_ERROR;
 		list_remove(&child->child_elem);
 		sema_up(&child->exit_sema); // 자식도 정리하라고 깨우기
 	}
-	palloc_free_page (args);
+	//palloc_free_page (args);
 	
 	return tid;
 }
@@ -274,6 +276,7 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 		
 error:
 	fork_args->is_forked = false;
+	enum intr_level old_level = intr_disable();
 	sema_up(&fork_args->fork_sema);
 	// test 
 	sema_down(&current->exit_sema);
