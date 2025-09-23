@@ -211,7 +211,9 @@ tid_t thread_create (const char *name, int priority, thread_func *function, void
 	/* Add to run queue. */
 	thread_unblock (t);
 
-	if (t->eff_priority > thread_current()->eff_priority) {
+	if (intr_context()){
+		intr_yield_on_return();
+	} else if (t->eff_priority > thread_current()->eff_priority) {
 		thread_yield();
 	}
 

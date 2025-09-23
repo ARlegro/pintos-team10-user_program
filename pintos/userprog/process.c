@@ -219,8 +219,6 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	struct thread *current = thread_current ();
 	struct intr_frame parent_if = fork_args->parent_intr_f;
 
-	bool succ = true;
-
 	// 2. 부모의 CPU 레지스터(유저 컨텍스트) 복사 
 	memcpy (&if_, &parent_if, sizeof (struct intr_frame));
 	current->tf = if_;
@@ -265,13 +263,9 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	}
 
 	current->next_fd = parent->next_fd;
-
 	process_init ();
 
 	// 7. 성공 시 rax 0세팅 + do_iret, 실패 시 에러로 goto
-	if (!succ) {
-		goto error;
-	} 
 
 	// 6. 부모 깨우기 (자식의 fork_sema로 신호)
 	sema_up(&fork_args->fork_sema);	
@@ -281,9 +275,8 @@ static bool duplicate_pte (uint64_t *pte, void *va, void *aux) {
 error:
 	fork_args->is_forked = false;
 	sema_up(&fork_args->fork_sema);
-	
 	// test 
-	sema_init(&current->exit_sema, 0);
+	// sema_init(&current->exit_sema, 0);
 	sema_down(&current->exit_sema);
 	thread_exit();
 }
