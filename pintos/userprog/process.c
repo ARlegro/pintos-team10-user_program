@@ -134,20 +134,35 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 
 	/* 1. TODO: If the parent_page is kernel page, then return immediately. */
 	/* 1. TODO: parent_page가 커널 페이지라면 즉시 반환한다. */
+	if (is_kernel_vaddr(va))
+	{
+		return true;
+	}
 
 	/* 2. Resolve VA from the parent's page map level 4. */
 	/* 2. 부모의 PML4에서 VA를 해석한다. */
 	parent_page = pml4_get_page (parent->pml4, va);
+	if (parent_page == NULL)
+	{
+		return false;
+	}
 
 	/* 3. TODO: Allocate new PAL_USER page for the child and set result to
 	 *    TODO: NEWPAGE. */
 	/* 3. TODO: 자식용 PAL_USER 페이지를 새로 할당하고 NEWPAGE에 저장한다. */
+	newpage = palloc_get_page(PAL_ZERO);
+	if (newpage == NULL)
+	{
+		return false;
+	}
 
 	/* 4. TODO: Duplicate parent's page to the new page and
 	 *    TODO: check whether parent's page is writable or not (set WRITABLE
 	 *    TODO: according to the result). */
 	/* 4. TODO: 부모 페이지 내용을 새 페이지로 복사하고,
 	 *    TODO: 부모 페이지의 쓰기 가능 여부를 확인해 WRITABLE을 설정한다. */
+	memcpy(newpage, parent_page, PGSIZE);
+	writable = is_writable(pte);
 
 	/* 5. Add new page to child's page table at address VA with WRITABLE
 	 *    permission. */
@@ -155,7 +170,9 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 	if (!pml4_set_page (current->pml4, va, newpage, writable)) {
 		/* 6. TODO: if fail to insert page, do error handling. */
 		/* 6. TODO: 페이지 삽입 실패 시 에러 처리를 수행한다. */
+		return false;
 	}
+	
 	return true;
 }
 #endif
@@ -174,12 +191,17 @@ __do_fork (void *aux) {
 	struct thread *current = thread_current ();
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	/* TODO: parent_if를 전달하는 방법을 구현한다. (process_fork()의 if_) */
-	struct intr_frame *parent_if;
+
+	// Project_2
+	struct intr_frame *parent_if = &parent->backup_if;
 	bool succ = true;
 
 	/* 1. Read the cpu context to local stack. */
 	/* 1. CPU 컨텍스트를 로컬 스택으로 복사한다. */
 	memcpy (&if_, parent_if, sizeof (struct intr_frame));
+	
+	// Project_2 자식 프로세스의 return 값
+	if_.R.rax = 0;
 
 	/* 2. Duplicate PT */
 	/* 2. 페이지 테이블 복제 */
@@ -207,6 +229,24 @@ __do_fork (void *aux) {
 	 * TODO:       이 함수가 부모의 자원을 성공적으로 복제하기 전까지
 	 * TODO:       부모는 fork()에서 반환되면 안 된다. */
 
+	if (parent->fd_idx >= FDCOUNT_LIMIT)
+	{
+		goto error;
+	}
+
+	current->fd_idx = parent->fd_idx;				
+	for (int fd = 3; fd < parent->fd_idx; fd++)
+	{
+		if (parent->fdt[fd] == NULL)
+		{
+			continue;
+		}
+
+		current->fdt[fd] = file_duplicate(parent->fdt[fd]);
+	}
+
+	sema_up(&current->fork_sema);
+
 	process_init ();
 
 	/* Finally, switch to the newly created process. */
@@ -214,7 +254,9 @@ __do_fork (void *aux) {
 	if (succ)
 		do_iret (&if_);
 error:
-	thread_exit ();
+	current->exit_status = TID_ERROR;
+	sema_down(&current->fork_sema);
+	exit(TID_ERROR);
 }
 
 /* Switch the current execution context to the f_name.

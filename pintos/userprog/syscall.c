@@ -84,7 +84,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		exit(f->R.rdi);
 		break;
 	case SYS_FORK:
-		//fork(f->R.rdi);
+		f->R.rax = fork(f->R.rdi);
 		break;
 	case SYS_EXEC:
 		f->R.rax = exec(f->R.rdi);
@@ -296,7 +296,7 @@ int tell (int fd)
 
 	if (fd < 3 || p_file == NULL)
 	{
-		return;
+		return -1;
 	}
 
 	return file_tell(p_file);
