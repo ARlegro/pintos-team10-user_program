@@ -11,7 +11,7 @@ void process_exit (void);
 void process_activate (struct thread *next);
 
 // Project_2
-void argument_stack(char **argv, int argc, struct intr_frame *if_);
+void setup_argument_stack(char **argv, int argc, struct intr_frame *if_);
 
 struct thread *get_child_process(int pid);
 int fd_table_add_file(struct file *p_file);

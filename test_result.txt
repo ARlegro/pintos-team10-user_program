@@ -98,10 +98,6 @@ pass tests/threads/priority-donate-chain
 
 make tests/userprog/read-normal.result VERBOSE=1
 
-make tests/userprog/args-none.result VERBOSE=1
-
 pintos --gdb --fs-disk=10 -p tests/userprog/exec-boundary:exec-boundary -- -q -f run exec-boundary tests/userprog/exec-boundary
-
-pintos --gdb -v -k -T 60 -m 20   --fs-disk=10 -p tests/userprog/fork-once:fork-once -- -q   -f run fork-once
-
-make tests/userprog/exec-boundary.result VERBOSE=1
+pintos --gdb --fs-disk=10 -p tests/userprog/args-single:args-single -- -q   -f run 'args-single onearg'
+pintos --gdb --fs-disk=10 -p tests/userprog/fork-once:fork-once -- -q   -f run fork-once

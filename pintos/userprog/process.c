@@ -310,7 +310,7 @@ process_exec (void *f_name) {
 			return -1;
 
 	//Project_2
-	argument_stack (arg_list, arg_cnt, &if_);
+	setup_argument_stack (arg_list, arg_cnt, &if_);
 
 	palloc_free_page (file_name);
 	
@@ -370,7 +370,7 @@ process_exit (void) {
 		curr->runn_file = NULL;
 	}
 
-	for (int fd = 0; fd < curr->fd_idx; fd++)							// 열려있던 파일 디스크립터 닫기
+	for (int fd = 0; fd < curr->fd_idx; fd++)								// 열려있던 파일 디스크립터 닫기
 	{
 		close(fd);
 	}
@@ -380,11 +380,11 @@ process_exit (void) {
 		palloc_free_multiple(curr->fdt, FDT_PAGES);							// 파일 디스크립터 테이블 메모리 반환
 	}
 
-	process_cleanup ();													// 프로세스 페이지 테이블 정리
+	process_cleanup ();														// 프로세스 페이지 테이블 정리
 
-	sema_up(&curr->wait_sema);											// 부모에게 끝났음을 알림
+	sema_up(&curr->wait_sema);												// 부모에게 끝났음을 알림
 
-	sema_down(&curr->exit_sema);										// 부모가 수거 할때까지 대기
+	sema_down(&curr->exit_sema);											// 부모가 수거 할때까지 대기
 }
 
 /* Free the current process's resources. */
@@ -928,43 +928,75 @@ setup_stack (struct intr_frame *if_) {
 #endif /* VM */
 
 // Project_2
+/*
+	[rsp]        : fake return address (0)
+	[rsp + 8]    : argv[0]
+	[rsp + 16]   : argv[1]
+	...
+	[rsp + 8*argc]      : argv[argc-1]
+	[rsp + 8*(argc+1)]  : argv[argc] = NULL
+	... (그 아래엔 실제 문자열들)
+
+	setup_argument_stack()가 왜 필요한가?
+	-> 실행 직전에 유저 스택을 규약대로 만들어줘야 하기 때문
+
+	process_exec()는 무엇을 하는가?
+	-> 기존 프로세스의 주소 공간을 버리고 새로 지정한 프로그램(ELF 실행 파일)로 갈아타는 거야
+
+	main(argc, argv)로 시작시키는 이유
+	-> 그냥 ELF 코드만 올려서는 실행이 불가능
+	레지스터에 argc랑 argv 주소를 심어줘야 함
+	가짜 return address도 깔아줘서 안전하게 리턴 가능하게 함
+
+	char **argv
+	-> 실행할 프로그램의 인자 문자열 목록
+
+	int argc
+	-> 인자의 개수
+
+	struct intr_frame *if_
+	-> 실제로 CPU가 참고할 “실행 컨텍스트”
+	세 번째 인자인 if_는 intr_frame 구조체 포인터인데, 여기서 스택 포인터와 레지스터 값을 직접 조작합니다
+
+
+*/
 
 // 유저 스택에 파싱된 토큰을 저장하는 함수
-// 문자열과 문자열의 주소들을 저장함, rsp = regiser stack pointer (스택  포인터)
-void argument_stack(char **argv, int argc, struct intr_frame *fr)
+// 문자열과 C문자열의 주소들을 저장함
+void setup_argument_stack(char **argv, int argc, struct intr_frame *if_)
 {
-	char *arg_addr[100];									// 스택에 저장된 주소를 보관하는 배열
-	int argv_len;
+	char *arg_addr[100];										// 스택에 저장된 주소를 보관하는 배열
+	int argv_len;												// 문자열의 길이 저장
 
-	// argv의 마지막 인자부터 스택에 거꾸로 삽입
+																// argv의 마지막 인자부터 스택에 거꾸로 삽입
 	// 높은 쪽에서 낮은 쪽으로 자라기 때문에 역순
 	for (int i = argc - 1; i >= 0; i--)
 	{
-		argv_len = strlen(argv[i]) + 1;						// 문자열 길이 + NULL 문자
-		fr->rsp -= argv_len;								// 스택 포인터를 인자 길이만큼 감소
-		memcpy(fr->rsp, argv[i], argv_len);					// 실제 문자열을 스택에 복사
-		arg_addr[i] = fr->rsp;								// 해당 문자열이 저장된 주소 기록
+		argv_len = strlen(argv[i]) + 1;							// 문자열 길이 + NULL 문자
+		if_->rsp -= argv_len;									// 스택 포인터를 인자 길이만큼 감소
+		memcpy(if_->rsp, argv[i], argv_len);					// 실제 문자열을 스택에 복사
+		arg_addr[i] = if_->rsp;									// 해당 문자열이 저장된 주소 기록
 	}	
 
-	while (fr->rsp % 8)										// 스택을 8바이트 단위로 정렬
+	while (if_->rsp % 8 != 0)									// 스택을 8바이트 단위로 정렬
 	{	
-		(*(uint8_t *)(--fr->rsp)) = 0;						// 1바이트씩 0으로 채움
+		(*(uint8_t *)(--(if_->rsp))) = 0;						// 1바이트씩 0으로 채움
 	}	
 
-	fr->rsp -= 8;											// argv[argc] = NULL
-	memset(fr->rsp, 0, sizeof(char *));
+	if_->rsp -= 8;												// argv[argc] = NULL
+	memset(if_->rsp, 0, sizeof(char *));
 
-	for (int i = argc - 1; i >= 0; i--)						// argv 배열을 스택에 역순으로 저장
+	for (int i = argc - 1; i >= 0; i--)							// argv 배열을 스택에 역순으로 저장
 	{
-		fr->rsp -= 8;										// 포인터 크기만큼 스택 감소
-		memcpy(fr->rsp, &arg_addr[i], sizeof(char *));		// 문자열 주소를 스택에 저장
+		if_->rsp -= 8;											// 포인터 크기만큼 스택 감소
+		memcpy(if_->rsp, &arg_addr[i], sizeof(char *));			// 문자열 주소를 스택에 저장
 	}
 
-	fr->rsp = fr->rsp - 8;									// fake return address (NULL) 저장
-	memset(fr->rsp, 0, sizeof(void *));
+	if_->rsp = if_->rsp - 8;									// fake return address (NULL) 저장
+	memset(if_->rsp, 0, sizeof(void *));
 
-	fr->R.rdi = argc;										// 첫 번째 인자 전달 규약에 맞게 레지스터 설정
-	fr->R.rsi = fr->rsp + 8;								
+	if_->R.rdi = argc;											// 첫 번째 인자 전달 규약에 맞게 레지스터 설정
+	if_->R.rsi = if_->rsp + 8;								
 }
 
 // 현재 프로세스의 자식 리스트를 검색하여 해당 pid에 맞틑 프로세스 디스크립터를 반환, 없으면 NULL
